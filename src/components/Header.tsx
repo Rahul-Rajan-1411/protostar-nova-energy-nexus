@@ -1,89 +1,90 @@
 
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, AlertCircle, User, LogOut } from 'lucide-react';
-import { Button } from "@/components/ui/button";
-import { motion } from "framer-motion";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Button } from '@/components/ui/button';
+import { Home, BarChart2, Settings, SunMedium, LogOut } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useMobile } from '@/hooks/use-mobile';
 
 const Header = () => {
-  const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
+  const isMobile = useMobile();
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   return (
-    <header className="header-gradient text-white py-4 px-6">
-      <div className="container mx-auto flex flex-col items-center justify-between md:flex-row">
-        <div className="w-full flex justify-center md:w-auto md:justify-start mb-4 md:mb-0">
-          <motion.img 
+    <header className="sticky top-0 z-50 w-full border-b bg-white">
+      <div className="flex h-16 items-center justify-between px-4 md:px-6">
+        <div className="flex items-center">
+          <div className="text-2xl font-bold text-green-600 mr-2">
+            Protostar Nova
+          </div>
+        </div>
+
+        <div className="flex justify-center absolute left-0 right-0 mx-auto w-40 pointer-events-none">
+          <img 
             src="/lovable-uploads/531f50f5-6b5c-4c4d-a4ad-b66888cbc80b.png" 
-            alt="Protostar Nova Logo" 
-            className="h-12 w-12"
-            animate={{ rotate: 360 }}
-            transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+            alt="Logo" 
+            className="h-12" 
           />
         </div>
-        
-        <h1 className="text-xl font-bold mb-4 md:mb-0">Protostar Nova</h1>
-        
-        <div className="flex items-center space-x-6">
-          <nav className="hidden md:flex space-x-6">
-            <Link to="/" className="font-medium hover:text-gray-200 transition-colors">Home</Link>
-            <Link to="/projects" className="font-medium hover:text-gray-200 transition-colors">Projects</Link>
-            <Link to="/settings" className="font-medium hover:text-gray-200 transition-colors">Settings</Link>
-          </nav>
-          
-          <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
-              <AlertCircle className="h-5 w-5" />
-            </Button>
-            
-            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
-              <Bell className="h-5 w-5" />
-            </Button>
-            
-            {user ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="rounded-full bg-purple-600 text-white hover:bg-purple-700">
-                    <span>{user.email.charAt(0).toUpperCase()}</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel>
-                    <div className="flex flex-col">
-                      <span>{user.email}</span>
-                      <span className="text-xs text-muted-foreground capitalize">{user.role}</span>
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem>Profile</DropdownMenuItem>
-                  <DropdownMenuItem>Settings</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Logout
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <Button variant="outline" size="sm" className="text-white border-white hover:bg-white/10" onClick={() => navigate('/login')}>
+
+        <div className="flex items-center space-x-1 md:space-x-2">
+          {user ? (
+            <>
+              {!isMobile && (
+                <>
+                  <Link to="/">
+                    <Button variant="ghost" size="sm" className="text-gray-700 hover:text-green-600">
+                      <Home className="h-5 w-5 mr-1" />
+                      Dashboard
+                    </Button>
+                  </Link>
+                  <Link to="/projects">
+                    <Button variant="ghost" size="sm" className="text-gray-700 hover:text-green-600">
+                      <SunMedium className="h-5 w-5 mr-1" />
+                      Projects
+                    </Button>
+                  </Link>
+                  <Link to="/analytics">
+                    <Button variant="ghost" size="sm" className="text-gray-700 hover:text-green-600">
+                      <BarChart2 className="h-5 w-5 mr-1" />
+                      Analytics
+                    </Button>
+                  </Link>
+                  <Link to="/settings">
+                    <Button variant="ghost" size="sm" className="text-gray-700 hover:text-green-600">
+                      <Settings className="h-5 w-5 mr-1" />
+                      Settings
+                    </Button>
+                  </Link>
+                </>
+              )}
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleLogout}
+                className="text-gray-700 hover:text-red-600"
+              >
+                <LogOut className="h-5 w-5" />
+                {!isMobile && <span className="ml-1">Logout</span>}
+              </Button>
+            </>
+          ) : (
+            <Link to="/login">
+              <Button variant="default" size="sm">
                 Login
               </Button>
-            )}
-          </div>
+            </Link>
+          )}
         </div>
       </div>
     </header>

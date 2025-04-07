@@ -31,6 +31,8 @@ const Projects = () => {
         
         if (projectsError) throw projectsError;
         
+        if (!projectsData) return [];
+        
         // For each project, get the count of buildings and SPDUs
         const projectsWithCounts = await Promise.all(projectsData.map(async (project) => {
           // Get buildings count

@@ -28,7 +28,8 @@ const UsagePattern = ({ dateRange, startDate, endDate }: UsagePatternProps) => {
     const fetchUsageData = async () => {
       try {
         setLoading(true);
-        let query = supabase.from('spdu_readings').select('source1_kwh, source2_kwh, timestamp');
+        let query = supabase.from('spdu_readings')
+          .select('source1_kwh, source2_kwh, timestamp');
 
         // Apply date filtering based on the selected range
         switch (dateRange) {

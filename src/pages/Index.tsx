@@ -29,7 +29,7 @@ const Index = () => {
       try {
         // Fetch counts for projects, devices, and central devices
         const [projectsResponse, spdusResponse, centralDevicesResponse, readingsResponse] = await Promise.all([
-          supabase.from('projects').select('id, status').eq('status', 'active'),
+          supabase.from('projects').select('id, status'),
           supabase.from('spdus').select('id, status'),
           supabase.from('central_devices').select('id, status'),
           fetchReadingsData()
@@ -39,28 +39,32 @@ const Index = () => {
         if (spdusResponse.error) throw spdusResponse.error;
         if (centralDevicesResponse.error) throw centralDevicesResponse.error;
 
-        const activeProjects = projectsResponse.data.filter(p => p.status === 'active').length;
-        const inactiveProjects = projectsResponse.data.length - activeProjects;
+        const projects = projectsResponse.data || [];
+        const spdus = spdusResponse.data || [];
+        const centralDevices = centralDevicesResponse.data || [];
 
-        const activeSpdus = spdusResponse.data.filter(s => s.status === 'active').length;
-        const inactiveSpdus = spdusResponse.data.length - activeSpdus;
+        const activeProjects = projects.filter(p => p.status === 'active').length;
+        const inactiveProjects = projects.length - activeProjects;
 
-        const activeCentralDevices = centralDevicesResponse.data.filter(d => d.status === 'active').length;
-        const inactiveCentralDevices = centralDevicesResponse.data.length - inactiveCentralDevices;
+        const activeSpdus = spdus.filter(s => s.status === 'active').length;
+        const inactiveSpdus = spdus.length - activeSpdus;
+
+        const activeCentralDevices = centralDevices.filter(d => d.status === 'active').length;
+        const inactiveCentralDevices = centralDevices.length - activeCentralDevices;
 
         return {
           projects: {
-            total: projectsResponse.data.length,
+            total: projects.length,
             active: activeProjects,
             inactive: inactiveProjects
           },
           spdus: {
-            total: spdusResponse.data.length,
+            total: spdus.length,
             active: activeSpdus,
             inactive: inactiveSpdus
           },
           centralDevices: {
-            total: centralDevicesResponse.data.length,
+            total: centralDevices.length,
             active: activeCentralDevices,
             inactive: inactiveCentralDevices
           },
@@ -80,7 +84,8 @@ const Index = () => {
 
   // Helper function to fetch readings data based on date range
   const fetchReadingsData = async () => {
-    let query = supabase.from('spdu_readings').select('source1_kwh, source2_kwh, timestamp');
+    let query = supabase.from('spdu_readings')
+      .select('source1_kwh, source2_kwh, timestamp');
 
     // Apply date filtering based on the selected range
     switch (dateRange) {
@@ -114,8 +119,8 @@ const Index = () => {
     if (error) throw error;
 
     // Calculate solar totals
-    const totalSolar = data.reduce((sum, item) => sum + Number(item.source2_kwh || 0), 0);
-    const totalGrid = data.reduce((sum, item) => sum + Number(item.source1_kwh || 0), 0);
+    const totalSolar = data?.reduce((sum, item) => sum + Number(item.source2_kwh || 0), 0) || 0;
+    const totalGrid = data?.reduce((sum, item) => sum + Number(item.source1_kwh || 0), 0) || 0;
     
     // Calculate consumed/unused ratios (In a real app, this would be more precise)
     const consumed = totalSolar * 0.95; // 95% of generated solar is consumed

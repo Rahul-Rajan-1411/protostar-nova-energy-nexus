@@ -9,6 +9,7 @@ import RequireAuth from "@/components/RequireAuth";
 import Index from "./pages/Index";
 import Projects from "./pages/Projects";
 import Settings from "./pages/Settings";
+import Analytics from "./pages/Analytics";
 import Login from "./pages/Login";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
@@ -38,6 +39,14 @@ const App = () => (
               element={
                 <RequireAuth>
                   <Projects />
+                </RequireAuth>
+              } 
+            />
+            <Route 
+              path="/analytics" 
+              element={
+                <RequireAuth>
+                  <Analytics />
                 </RequireAuth>
               } 
             />

@@ -50,7 +50,7 @@ const Login = () => {
             className="flex justify-center mb-4"
           >
             <motion.img 
-              src="/lovable-uploads/531f50f5-6b5c-4c4d-a4ad-b66888cbc80b.png" 
+              src="/lovable-uploads/sun-logo.png" 
               alt="Protostar Nova Logo" 
               className="h-24 w-24"
               animate={{ rotate: 360 }}

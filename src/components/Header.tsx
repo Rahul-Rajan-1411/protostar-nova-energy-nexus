@@ -31,7 +31,7 @@ const Header = () => {
 
         <div className="flex justify-center absolute left-0 right-0 mx-auto w-40 pointer-events-none">
           <img 
-            src="/lovable-uploads/531f50f5-6b5c-4c4d-a4ad-b66888cbc80b.png" 
+            src="/lovable-uploads/sun-logo.png" 
             alt="Logo" 
             className="h-12" 
           />

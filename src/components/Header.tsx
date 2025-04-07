@@ -20,11 +20,16 @@ const Header = () => {
     }
   };
 
-  return (
+ return (
     <header className="sticky top-0 z-50 w-full border-b bg-white">
       <div className="flex h-16 items-center justify-between px-4 md:px-6">
         <div className="flex items-center">
-          <div className="text-2xl font-bold text-green-600 mr-2">
+          <img 
+            src="/lovable-uploads/sun-logo.png" 
+            alt="Logo" 
+            className="h-12 w-12 mr-3 animate-slow-spin" 
+          />
+          <div className="text-2xl font-bold text-green-600">
             Protostar Nova
           </div>
         </div>

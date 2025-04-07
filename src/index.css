@@ -84,3 +84,63 @@
 .shadow-card {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
+
+/* Animation for the rotating logo */
+@keyframes slow-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-slow-spin {
+  animation: slow-spin 10s linear infinite;
+}
+
+/* Progress animations */
+@keyframes progress {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+.animate-progress {
+  animation: progress 1.5s ease-in-out;
+}
+
+/* Beautiful card hover effects */
+.hover-card-effect {
+  transition: all 0.3s ease;
+}
+
+.hover-card-effect:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Gradient backgrounds for cards */
+.bg-gradient-green {
+  background: linear-gradient(135deg, rgba(39, 174, 96, 0.1) 0%, rgba(30, 132, 73, 0.1) 100%);
+}
+
+.bg-gradient-blue {
+  background: linear-gradient(135deg, rgba(52, 152, 219, 0.1) 0%, rgba(41, 128, 185, 0.1) 100%);
+}
+
+.bg-gradient-purple {
+  background: linear-gradient(135deg, rgba(155, 89, 182, 0.1) 0%, rgba(142, 68, 173, 0.1) 100%);
+}
+
+.bg-gradient-orange {
+  background: linear-gradient(135deg, rgba(230, 126, 34, 0.1) 0%, rgba(211, 84, 0, 0.1) 100%);
+}
+
+/* Button hover effects */
+.button-glow:hover {
+  box-shadow: 0 0 15px rgba(46, 204, 113, 0.5);
+}

@@ -8,6 +8,8 @@ interface UsageDetailRowProps {
   label: string;
   value: string;
   color: string;
+  indent?: boolean;
+  bold?: boolean;
 }
 
 interface UsageDetailsProps {
@@ -16,14 +18,14 @@ interface UsageDetailsProps {
   endDate?: Date;
 }
 
-const UsageDetailRow = ({ label, value, color }: UsageDetailRowProps) => {
+const UsageDetailRow = ({ label, value, color, indent = false, bold = false }: UsageDetailRowProps) => {
   return (
-    <div className="flex items-center justify-between mb-5">
+    <div className={`flex items-center justify-between mb-5 ${indent ? 'ml-6' : ''}`}>
       <div className="flex items-center">
         <div className={`w-3 h-3 rounded-full ${color} mr-3`}></div>
-        <span className="text-gray-700">{label}</span>
+        <span className={`text-gray-700 ${bold ? 'font-bold' : ''}`}>{label}</span>
       </div>
-      <div className="font-semibold">{value}</div>
+      <div className={`${bold ? 'font-bold' : 'font-semibold'}`}>{value}</div>
     </div>
   );
 };
@@ -139,37 +141,43 @@ const UsageDetails = ({ dateRange, startDate, endDate }: UsageDetailsProps) => {
           <UsageDetailRow 
             label="Solar Power: Generated" 
             value={`${usageData.solarGenerated.toFixed(2)} MWh`} 
-            color="bg-green-600" 
+            color="bg-green-600"
+            bold={true}
           />
           
           <UsageDetailRow 
             label="Solar Power: Consumed" 
             value={`${usageData.solarConsumed.toFixed(2)} MWh`} 
             color="bg-green-600" 
+            indent={true}
           />
           
           <UsageDetailRow 
             label="Solar Power: Distributed" 
             value={`${usageData.solarDistributed.toFixed(2)} MWh`} 
             color="bg-green-500" 
+            indent={true}
           />
           
           <UsageDetailRow 
             label="Solar Power: Common Utilities" 
             value={`${usageData.solarCommonUtilities.toFixed(2)} MWh`} 
             color="bg-yellow-500" 
+            indent={true}
           />
           
           <UsageDetailRow 
             label="Solar Power: Unused" 
             value={`${usageData.solarUnused.toFixed(2)} MWh`} 
             color="bg-orange-500" 
+            indent={true}
           />
           
           <UsageDetailRow 
-            label="Grid Power consumed" 
+            label="Grid Power: Consumed" 
             value={`${usageData.gridConsumed.toFixed(2)} MWh`} 
             color="bg-red-500" 
+            bold={true}
           />
         </div>
       )}

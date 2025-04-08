@@ -46,6 +46,7 @@ const Index = () => {
     queryKey: ['stats', dateRange, startDate, endDate, selectedMonth],
     queryFn: async () => {
       try {
+        console.log('Fetching stats data...');
         // Fetch counts for projects, devices, and central devices
         const [projectsResponse, spdusResponse, centralDevicesResponse, solarGenResponse] = await Promise.all([
           supabase.from('projects').select('id, status'),
@@ -53,6 +54,8 @@ const Index = () => {
           supabase.from('central_devices').select('id, status'),
           fetchSolarGenerationData()
         ]);
+
+        console.log('SPDU Response:', spdusResponse);
 
         if (projectsResponse.error) throw projectsResponse.error;
         if (spdusResponse.error) throw spdusResponse.error;
@@ -65,6 +68,7 @@ const Index = () => {
         const activeProjects = projects.filter(p => p.status === 'active').length;
         const inactiveProjects = projects.length - activeProjects;
 
+        // Properly count active and inactive SPDUs
         const activeSpdus = spdus.filter(s => s.status === 'active').length;
         const inactiveSpdus = spdus.length - activeSpdus;
 

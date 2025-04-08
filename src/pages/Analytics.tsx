@@ -4,6 +4,7 @@ import Header from '@/components/Header';
 import DateSelector, { DateRangeType } from '@/components/DateSelector';
 import UsagePattern from '@/components/UsagePattern';
 import UsageDetails from '@/components/UsageDetails';
+import { format } from 'date-fns';
 
 const Analytics = () => {
   // Use March 31, 2023 as the default "present day" during development
@@ -34,13 +35,21 @@ const Analytics = () => {
     }
   };
 
+  // Format the current date for display
+  const formattedCurrentDate = format(currentDate, 'dd/MM/yyyy');
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
       <main className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-gray-800 mb-6">Analytics Dashboard</h1>
         
-        <DateSelector onDateRangeChange={handleDateRangeChange} />
+        <div className="flex justify-between items-center mb-6">
+          <div className="text-sm font-medium text-gray-600">
+            Current Date: <span className="font-bold">{formattedCurrentDate}</span>
+          </div>
+          <DateSelector onDateRangeChange={handleDateRangeChange} />
+        </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <UsagePattern 

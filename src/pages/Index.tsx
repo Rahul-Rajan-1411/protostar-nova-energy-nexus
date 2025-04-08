@@ -10,6 +10,7 @@ import { Building, Zap, PowerOff, Sun } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
+import { format } from 'date-fns';
 
 const Index = () => {
   // Use March 31, 2023 as the default "present day" during development
@@ -46,11 +47,11 @@ const Index = () => {
     queryFn: async () => {
       try {
         // Fetch counts for projects, devices, and central devices
-        const [projectsResponse, spdusResponse, centralDevicesResponse, readingsResponse] = await Promise.all([
+        const [projectsResponse, spdusResponse, centralDevicesResponse, solarGenResponse] = await Promise.all([
           supabase.from('projects').select('id, status'),
           supabase.from('spdus').select('id, status'),
           supabase.from('central_devices').select('id, status'),
-          fetchReadingsData()
+          fetchSolarGenerationData()
         ]);
 
         if (projectsResponse.error) throw projectsResponse.error;
@@ -86,7 +87,7 @@ const Index = () => {
             active: activeCentralDevices,
             inactive: inactiveCentralDevices
           },
-          solar: readingsResponse
+          solar: solarGenResponse
         };
       } catch (error) {
         console.error('Error fetching stats:', error);
@@ -100,98 +101,146 @@ const Index = () => {
     }
   });
 
-  // Helper function to fetch readings data based on date range
-  const fetchReadingsData = async () => {
-    let spduQuery = supabase.from('spdu_readings')
-      .select('source1_kwh, source2_kwh, timestamp');
-    
-    let buildingMeterQuery = supabase.from('building_meter_readings')
-      .select('reading, timestamp');
+  // Helper function to fetch solar generation data from building_meters and building_meter_readings
+  const fetchSolarGenerationData = async () => {
+    try {
+      // First, get the solar generation meter IDs
+      const { data: solarMeters, error: metersError } = await supabase
+        .from('building_meters')
+        .select('id')
+        .eq('meter_type', 'solar_generation');
+      
+      if (metersError) throw metersError;
+      
+      if (!solarMeters || solarMeters.length === 0) {
+        console.log('No solar generation meters found');
+        // Return default values if no solar meters found
+        return {
+          total: 0,
+          consumed: 0, 
+          unused: 0,
+          grid: 0
+        };
+      }
+      
+      // Extract meter IDs
+      const meterIds = solarMeters.map(meter => meter.id);
+      
+      // Now query the readings based on the meter IDs and date filters
+      let readingsQuery = supabase
+        .from('building_meter_readings')
+        .select('reading, building_meter_id, timestamp')
+        .in('building_meter_id', meterIds);
+      
+      // Also get SPDU readings for grid power
+      let spduQuery = supabase
+        .from('spdu_readings')
+        .select('source1_kwh, source2_kwh, timestamp');
+      
+      // Apply date filtering based on the selected range
+      switch (dateRange) {
+        case 'day':
+          // During development, we use March 31, 2023 as the "present day"
+          const developmentDate = new Date(2023, 2, 31); // March 31, 2023
+          const dayStart = new Date(developmentDate);
+          dayStart.setHours(0, 0, 0, 0);
+          const dayEnd = new Date(developmentDate);
+          dayEnd.setHours(23, 59, 59, 999);
+          
+          readingsQuery = readingsQuery
+            .gte('timestamp', dayStart.toISOString())
+            .lte('timestamp', dayEnd.toISOString());
+          
+          spduQuery = spduQuery
+            .gte('timestamp', dayStart.toISOString())
+            .lte('timestamp', dayEnd.toISOString());
+          break;
+          
+        case 'month':
+          const monthStart = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
+          const monthEnd = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0, 23, 59, 59, 999);
+          
+          readingsQuery = readingsQuery
+            .gte('timestamp', monthStart.toISOString())
+            .lte('timestamp', monthEnd.toISOString());
+          
+          spduQuery = spduQuery
+            .gte('timestamp', monthStart.toISOString())
+            .lte('timestamp', monthEnd.toISOString());
+          break;
+          
+        case 'custom':
+          if (startDate) {
+            const customStart = new Date(startDate);
+            customStart.setHours(0, 0, 0, 0);
+            readingsQuery = readingsQuery.gte('timestamp', customStart.toISOString());
+            spduQuery = spduQuery.gte('timestamp', customStart.toISOString());
+          }
+          if (endDate) {
+            const customEnd = new Date(endDate);
+            customEnd.setHours(23, 59, 59, 999);
+            readingsQuery = readingsQuery.lte('timestamp', customEnd.toISOString());
+            spduQuery = spduQuery.lte('timestamp', customEnd.toISOString());
+          }
+          break;
+        case 'lifetime':
+          // No date filtering for lifetime
+          break;
+      }
 
-    // Apply date filtering based on the selected range
-    switch (dateRange) {
-      case 'day':
-        // During development, we use March 31, 2023 as the "present day"
-        const developmentDate = new Date(2023, 2, 31); // March 31, 2023
-        const dayStart = new Date(developmentDate);
-        dayStart.setHours(0, 0, 0, 0);
-        const dayEnd = new Date(developmentDate);
-        dayEnd.setHours(23, 59, 59, 999);
-        
-        spduQuery = spduQuery
-          .gte('timestamp', dayStart.toISOString())
-          .lte('timestamp', dayEnd.toISOString());
-        
-        buildingMeterQuery = buildingMeterQuery
-          .gte('timestamp', dayStart.toISOString())
-          .lte('timestamp', dayEnd.toISOString());
-        break;
-        
-      case 'month':
-        const monthStart = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
-        const monthEnd = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0, 23, 59, 59, 999);
-        
-        spduQuery = spduQuery
-          .gte('timestamp', monthStart.toISOString())
-          .lte('timestamp', monthEnd.toISOString());
-        
-        buildingMeterQuery = buildingMeterQuery
-          .gte('timestamp', monthStart.toISOString())
-          .lte('timestamp', monthEnd.toISOString());
-        break;
-        
-      case 'custom':
-        if (startDate) {
-          const customStart = new Date(startDate);
-          customStart.setHours(0, 0, 0, 0);
-          spduQuery = spduQuery.gte('timestamp', customStart.toISOString());
-          buildingMeterQuery = buildingMeterQuery.gte('timestamp', customStart.toISOString());
-        }
-        if (endDate) {
-          const customEnd = new Date(endDate);
-          customEnd.setHours(23, 59, 59, 999);
-          spduQuery = spduQuery.lte('timestamp', customEnd.toISOString());
-          buildingMeterQuery = buildingMeterQuery.lte('timestamp', customEnd.toISOString());
-        }
-        break;
-      case 'lifetime':
-        // No date filtering for lifetime
-        break;
+      const [readingsResponse, spduResponse] = await Promise.all([
+        readingsQuery,
+        spduQuery
+      ]);
+      
+      if (readingsResponse.error) throw readingsResponse.error;
+      if (spduResponse.error) throw spduResponse.error;
+      
+      // Sum up the solar generation readings
+      const totalSolarGeneration = readingsResponse.data?.reduce((sum, item) => sum + Number(item.reading || 0), 0) || 0;
+      
+      // Add SPDU readings if available
+      const totalSolarFromSPDU = spduResponse.data?.reduce((sum, item) => sum + Number(item.source2_kwh || 0), 0) || 0;
+      const totalGrid = spduResponse.data?.reduce((sum, item) => sum + Number(item.source1_kwh || 0), 0) || 0;
+      
+      // Total solar is the sum from both sources
+      const totalSolar = totalSolarGeneration + totalSolarFromSPDU;
+      
+      // Calculate consumed/unused ratios (In a real app, this would be more precise)
+      const consumed = totalSolar * 0.95; // 95% of generated solar is consumed
+      const unused = totalSolar * 0.05; // 5% unused/lost
+
+      return {
+        total: parseFloat(totalSolar.toFixed(2)),
+        consumed: parseFloat(consumed.toFixed(2)),
+        unused: parseFloat(unused.toFixed(2)),
+        grid: parseFloat(totalGrid.toFixed(2))
+      };
+    } catch (error) {
+      console.error('Error fetching solar generation data:', error);
+      return {
+        total: 0,
+        consumed: 0,
+        unused: 0,
+        grid: 0
+      };
     }
-
-    const [spduData, buildingMeterData] = await Promise.all([
-      spduQuery,
-      buildingMeterQuery
-    ]);
-
-    if (spduData.error) throw spduData.error;
-    if (buildingMeterData.error) throw buildingMeterData.error;
-
-    // Calculate solar totals from SPDU readings
-    const totalSolar = spduData.data?.reduce((sum, item) => sum + Number(item.source2_kwh || 0), 0) || 0;
-    const totalGrid = spduData.data?.reduce((sum, item) => sum + Number(item.source1_kwh || 0), 0) || 0;
-    
-    // Add building meter readings if available
-    const buildingMeterTotal = buildingMeterData.data?.reduce((sum, item) => sum + Number(item.reading || 0), 0) || 0;
-    
-    // Calculate consumed/unused ratios (In a real app, this would be more precise)
-    const consumed = totalSolar * 0.95; // 95% of generated solar is consumed
-    const unused = totalSolar * 0.05; // 5% unused/lost
-
-    return {
-      total: parseFloat((totalSolar + buildingMeterTotal).toFixed(2)),
-      consumed: parseFloat(consumed.toFixed(2)),
-      unused: parseFloat(unused.toFixed(2)),
-      grid: parseFloat(totalGrid.toFixed(2))
-    };
   };
+
+  // Format the current date for display
+  const formattedCurrentDate = format(currentDate, 'dd/MM/yyyy');
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <Header />
 
       <main className="flex-1 container mx-auto px-4 py-6">
-        <DateSelector onDateRangeChange={handleDateRangeChange} />
+        <div className="flex justify-between items-center mb-6">
+          <div className="text-sm font-medium text-gray-600">
+            Current Date: <span className="font-bold">{formattedCurrentDate}</span>
+          </div>
+          <DateSelector onDateRangeChange={handleDateRangeChange} />
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <StatCard 

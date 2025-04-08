@@ -23,16 +23,16 @@ const Header = () => {
  return (
     <header className="sticky top-0 z-50 w-full border-b bg-white">
       <div className="flex h-16 items-center justify-between px-4 md:px-6">
-        <div className="flex items-center">
+        <Link to="/" className="flex items-center">
           <img 
             src="/lovable-uploads/sun-logo.png" 
             alt="Logo" 
-            className="h-12 w-12 mr-3 animate-slow-spin" 
+            className="h-12 w-12 animate-slow-spin" 
           />
-          <div className="text-2xl font-bold text-green-600">
+          <div className="text-2xl font-bold text-green-600 ml-2">
             Protostar Nova
           </div>
-        </div>
+        </Link>
 
         <div className="flex items-center space-x-1 md:space-x-2">
           {user ? (

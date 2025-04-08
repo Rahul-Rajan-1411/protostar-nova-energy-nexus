@@ -16,6 +16,7 @@ interface UsageDetailsProps {
   dateRange: DateRangeType;
   startDate?: Date;
   endDate?: Date;
+  selectedMonth?: Date;
 }
 
 const UsageDetailRow = ({ label, value, color, indent = false, bold = false }: UsageDetailRowProps) => {
@@ -30,7 +31,7 @@ const UsageDetailRow = ({ label, value, color, indent = false, bold = false }: U
   );
 };
 
-const UsageDetails = ({ dateRange, startDate, endDate }: UsageDetailsProps) => {
+const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDetailsProps) => {
   const [loading, setLoading] = useState(true);
   const [usageData, setUsageData] = useState({
     solarGenerated: 0,
@@ -45,57 +46,121 @@ const UsageDetails = ({ dateRange, startDate, endDate }: UsageDetailsProps) => {
     const fetchUsageDetails = async () => {
       try {
         setLoading(true);
-        let query = supabase.from('spdu_readings')
+        let spduQuery = supabase.from('spdu_readings')
           .select('source1_kwh, source2_kwh, timestamp');
+        
+        let buildingMeterQuery = supabase.from('building_meter_readings')
+          .select('reading, timestamp');
 
         // Apply date filtering based on the selected range
         switch (dateRange) {
           case 'day':
-            query = query.gte('timestamp', new Date(new Date().setHours(0, 0, 0, 0)).toISOString());
+            // During development, we use March 31, 2023 as the "present day"
+            if (startDate) {
+              const dayStart = new Date(startDate);
+              dayStart.setHours(0, 0, 0, 0);
+              const dayEnd = new Date(startDate);
+              dayEnd.setHours(23, 59, 59, 999);
+              
+              spduQuery = spduQuery
+                .gte('timestamp', dayStart.toISOString())
+                .lte('timestamp', dayEnd.toISOString());
+              
+              buildingMeterQuery = buildingMeterQuery
+                .gte('timestamp', dayStart.toISOString())
+                .lte('timestamp', dayEnd.toISOString());
+            } else {
+              // Default to March 31, 2023 during development
+              const defaultDay = new Date(2023, 2, 31); // March 31, 2023
+              const dayStart = new Date(defaultDay);
+              dayStart.setHours(0, 0, 0, 0);
+              const dayEnd = new Date(defaultDay);
+              dayEnd.setHours(23, 59, 59, 999);
+              
+              spduQuery = spduQuery
+                .gte('timestamp', dayStart.toISOString())
+                .lte('timestamp', dayEnd.toISOString());
+              
+              buildingMeterQuery = buildingMeterQuery
+                .gte('timestamp', dayStart.toISOString())
+                .lte('timestamp', dayEnd.toISOString());
+            }
             break;
-          case 'week':
-            const weekAgo = new Date();
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            query = query.gte('timestamp', weekAgo.toISOString());
-            break;
+            
           case 'month':
-            const monthAgo = new Date();
-            monthAgo.setMonth(monthAgo.getMonth() - 1);
-            query = query.gte('timestamp', monthAgo.toISOString());
+            if (selectedMonth) {
+              const monthStart = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
+              const monthEnd = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0, 23, 59, 59, 999);
+              
+              spduQuery = spduQuery
+                .gte('timestamp', monthStart.toISOString())
+                .lte('timestamp', monthEnd.toISOString());
+              
+              buildingMeterQuery = buildingMeterQuery
+                .gte('timestamp', monthStart.toISOString())
+                .lte('timestamp', monthEnd.toISOString());
+            } else {
+              // Default to March 2023 during development
+              const defaultMonth = new Date(2023, 2, 1); // March 2023
+              const monthStart = new Date(defaultMonth);
+              const monthEnd = new Date(2023, 2 + 1, 0, 23, 59, 59, 999);
+              
+              spduQuery = spduQuery
+                .gte('timestamp', monthStart.toISOString())
+                .lte('timestamp', monthEnd.toISOString());
+              
+              buildingMeterQuery = buildingMeterQuery
+                .gte('timestamp', monthStart.toISOString())
+                .lte('timestamp', monthEnd.toISOString());
+            }
             break;
+            
           case 'custom':
             if (startDate) {
-              query = query.gte('timestamp', startDate.toISOString());
+              const customStart = new Date(startDate);
+              customStart.setHours(0, 0, 0, 0);
+              spduQuery = spduQuery.gte('timestamp', customStart.toISOString());
+              buildingMeterQuery = buildingMeterQuery.gte('timestamp', customStart.toISOString());
             }
             if (endDate) {
-              query = query.lte('timestamp', endDate.toISOString());
+              const customEnd = new Date(endDate);
+              customEnd.setHours(23, 59, 59, 999);
+              spduQuery = spduQuery.lte('timestamp', customEnd.toISOString());
+              buildingMeterQuery = buildingMeterQuery.lte('timestamp', customEnd.toISOString());
             }
             break;
+            
           case 'lifetime':
             // No date filtering for lifetime
             break;
         }
 
-        const { data, error } = await query;
+        const [spduData, buildingMeterData] = await Promise.all([
+          spduQuery,
+          buildingMeterQuery
+        ]);
 
-        if (error) {
-          throw error;
-        }
+        if (spduData.error) throw spduData.error;
+        if (buildingMeterData.error) throw buildingMeterData.error;
 
-        if (data && data.length > 0) {
-          // Calculate totals
-          const solarTotal = data.reduce((sum, item) => sum + Number(item.source2_kwh || 0), 0);
-          const gridTotal = data.reduce((sum, item) => sum + Number(item.source1_kwh || 0), 0);
+        if (spduData.data && spduData.data.length > 0) {
+          // Calculate solar totals from SPDU readings
+          const solarTotal = spduData.data.reduce((sum, item) => sum + Number(item.source2_kwh || 0), 0);
+          const gridTotal = spduData.data.reduce((sum, item) => sum + Number(item.source1_kwh || 0), 0);
+          
+          // Add building meter readings if available
+          const buildingMeterTotal = buildingMeterData.data?.reduce((sum, item) => sum + Number(item.reading || 0), 0) || 0;
+          const totalGenerated = solarTotal + buildingMeterTotal;
           
           // For this example, we'll simulate the detailed breakdown
           // In a real app, this would come from more detailed calculations
-          const solarConsumed = solarTotal * 0.7; // 70% of generated solar is consumed
-          const solarDistributed = solarTotal * 0.15; // 15% distributed to grid
-          const solarCommonUtilities = solarTotal * 0.1; // 10% used for common areas
-          const solarUnused = solarTotal * 0.05; // 5% unused/lost
+          const solarConsumed = totalGenerated * 0.7; // 70% of generated solar is consumed
+          const solarDistributed = totalGenerated * 0.15; // 15% distributed to grid
+          const solarCommonUtilities = totalGenerated * 0.1; // 10% used for common areas
+          const solarUnused = totalGenerated * 0.05; // 5% unused/lost
           
           setUsageData({
-            solarGenerated: parseFloat(solarTotal.toFixed(2)),
+            solarGenerated: parseFloat(totalGenerated.toFixed(2)),
             solarConsumed: parseFloat(solarConsumed.toFixed(2)),
             solarDistributed: parseFloat(solarDistributed.toFixed(2)),
             solarCommonUtilities: parseFloat(solarCommonUtilities.toFixed(2)),
@@ -126,7 +191,7 @@ const UsageDetails = ({ dateRange, startDate, endDate }: UsageDetailsProps) => {
     };
 
     fetchUsageDetails();
-  }, [dateRange, startDate, endDate]);
+  }, [dateRange, startDate, endDate, selectedMonth]);
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-card h-full">

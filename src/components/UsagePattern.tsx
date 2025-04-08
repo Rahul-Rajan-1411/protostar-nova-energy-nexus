@@ -9,6 +9,7 @@ interface UsagePatternProps {
   dateRange: DateRangeType;
   startDate?: Date;
   endDate?: Date;
+  selectedMonth?: Date;
 }
 
 interface ChartData {
@@ -17,7 +18,7 @@ interface ChartData {
   color: string;
 }
 
-const UsagePattern = ({ dateRange, startDate, endDate }: UsagePatternProps) => {
+const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePatternProps) => {
   const [chartData, setChartData] = useState<ChartData[]>([
     { name: 'Solar', value: 0, color: '#27ae60' },
     { name: 'Grid', value: 0, color: '#e74c3c' },
@@ -34,26 +35,63 @@ const UsagePattern = ({ dateRange, startDate, endDate }: UsagePatternProps) => {
         // Apply date filtering based on the selected range
         switch (dateRange) {
           case 'day':
-            query = query.gte('timestamp', new Date(new Date().setHours(0, 0, 0, 0)).toISOString());
+            // During development, we use March 31, 2023 as the "present day"
+            if (startDate) {
+              const dayStart = new Date(startDate);
+              dayStart.setHours(0, 0, 0, 0);
+              const dayEnd = new Date(startDate);
+              dayEnd.setHours(23, 59, 59, 999);
+              
+              query = query
+                .gte('timestamp', dayStart.toISOString())
+                .lte('timestamp', dayEnd.toISOString());
+            } else {
+              // Default to March 31, 2023 during development
+              const defaultDay = new Date(2023, 2, 31); // March 31, 2023
+              const dayStart = new Date(defaultDay);
+              dayStart.setHours(0, 0, 0, 0);
+              const dayEnd = new Date(defaultDay);
+              dayEnd.setHours(23, 59, 59, 999);
+              
+              query = query
+                .gte('timestamp', dayStart.toISOString())
+                .lte('timestamp', dayEnd.toISOString());
+            }
             break;
-          case 'week':
-            const weekAgo = new Date();
-            weekAgo.setDate(weekAgo.getDate() - 7);
-            query = query.gte('timestamp', weekAgo.toISOString());
-            break;
+            
           case 'month':
-            const monthAgo = new Date();
-            monthAgo.setMonth(monthAgo.getMonth() - 1);
-            query = query.gte('timestamp', monthAgo.toISOString());
+            if (selectedMonth) {
+              const monthStart = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
+              const monthEnd = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0, 23, 59, 59, 999);
+              
+              query = query
+                .gte('timestamp', monthStart.toISOString())
+                .lte('timestamp', monthEnd.toISOString());
+            } else {
+              // Default to March 2023 during development
+              const defaultMonth = new Date(2023, 2, 1); // March 2023
+              const monthStart = new Date(defaultMonth);
+              const monthEnd = new Date(2023, 2 + 1, 0, 23, 59, 59, 999);
+              
+              query = query
+                .gte('timestamp', monthStart.toISOString())
+                .lte('timestamp', monthEnd.toISOString());
+            }
             break;
+            
           case 'custom':
             if (startDate) {
-              query = query.gte('timestamp', startDate.toISOString());
+              const customStart = new Date(startDate);
+              customStart.setHours(0, 0, 0, 0);
+              query = query.gte('timestamp', customStart.toISOString());
             }
             if (endDate) {
-              query = query.lte('timestamp', endDate.toISOString());
+              const customEnd = new Date(endDate);
+              customEnd.setHours(23, 59, 59, 999);
+              query = query.lte('timestamp', customEnd.toISOString());
             }
             break;
+            
           case 'lifetime':
             // No date filtering for lifetime
             break;
@@ -101,7 +139,7 @@ const UsagePattern = ({ dateRange, startDate, endDate }: UsagePatternProps) => {
     };
 
     fetchUsageData();
-  }, [dateRange, startDate, endDate]);
+  }, [dateRange, startDate, endDate, selectedMonth]);
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload }: any) => {

@@ -6,14 +6,32 @@ import UsagePattern from '@/components/UsagePattern';
 import UsageDetails from '@/components/UsageDetails';
 
 const Analytics = () => {
+  // Use March 31, 2023 as the default "present day" during development
+  const [currentDate] = useState<Date>(new Date(2023, 2, 31)); // March 31, 2023
   const [dateRange, setDateRange] = useState<DateRangeType>('day');
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [startDate, setStartDate] = useState<Date>(currentDate);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date(2023, 2, 1)); // March 2023
 
-  const handleDateRangeChange = (type: DateRangeType, start?: Date, end?: Date) => {
+  const handleDateRangeChange = (type: DateRangeType, start?: Date, end?: Date, month?: Date) => {
     setDateRange(type);
-    setStartDate(start);
-    setEndDate(end);
+    
+    if (type === 'day') {
+      // Use the passed date or default to current date
+      setStartDate(start || currentDate);
+      setEndDate(undefined);
+    } else if (type === 'month') {
+      setSelectedMonth(month || new Date(2023, 2, 1)); // Default to March 2023
+      setStartDate(undefined);
+      setEndDate(undefined);
+    } else if (type === 'custom') {
+      if (start) setStartDate(start);
+      if (end) setEndDate(end);
+    } else {
+      // Lifetime - reset dates
+      setStartDate(undefined);
+      setEndDate(undefined);
+    }
   };
 
   return (
@@ -29,11 +47,13 @@ const Analytics = () => {
             dateRange={dateRange} 
             startDate={startDate} 
             endDate={endDate} 
+            selectedMonth={selectedMonth}
           />
           <UsageDetails 
             dateRange={dateRange} 
             startDate={startDate} 
-            endDate={endDate} 
+            endDate={endDate}
+            selectedMonth={selectedMonth}
           />
         </div>
       </main>

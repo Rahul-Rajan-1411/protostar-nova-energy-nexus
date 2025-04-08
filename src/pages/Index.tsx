@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from '@/components/Header';
 import StatCard from '@/components/StatCard';
 import UsagePattern from '@/components/UsagePattern';
@@ -12,19 +12,37 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
 
 const Index = () => {
+  // Use March 31, 2023 as the default "present day" during development
+  const [currentDate] = useState<Date>(new Date(2023, 2, 31)); // March 31, 2023
   const [dateRange, setDateRange] = useState<DateRangeType>('day');
-  const [startDate, setStartDate] = useState<Date | undefined>(undefined);
+  const [startDate, setStartDate] = useState<Date>(currentDate);
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date(2023, 2, 1)); // March 2023
 
-  const handleDateRangeChange = (type: DateRangeType, start?: Date, end?: Date) => {
+  const handleDateRangeChange = (type: DateRangeType, start?: Date, end?: Date, month?: Date) => {
     setDateRange(type);
-    setStartDate(start);
-    setEndDate(end);
+    
+    if (type === 'day') {
+      // Use the passed date or default to current date
+      setStartDate(start || currentDate);
+      setEndDate(undefined);
+    } else if (type === 'month') {
+      setSelectedMonth(month || new Date(2023, 2, 1)); // Default to March 2023
+      setStartDate(undefined);
+      setEndDate(undefined);
+    } else if (type === 'custom') {
+      if (start) setStartDate(start);
+      if (end) setEndDate(end);
+    } else {
+      // Lifetime - reset dates
+      setStartDate(undefined);
+      setEndDate(undefined);
+    }
   };
 
   // Query to fetch stats data
   const { data: statsData, isLoading: statsLoading } = useQuery({
-    queryKey: ['stats', dateRange, startDate, endDate],
+    queryKey: ['stats', dateRange, startDate, endDate, selectedMonth],
     queryFn: async () => {
       try {
         // Fetch counts for projects, devices, and central devices
@@ -84,30 +102,56 @@ const Index = () => {
 
   // Helper function to fetch readings data based on date range
   const fetchReadingsData = async () => {
-    let query = supabase.from('spdu_readings')
+    let spduQuery = supabase.from('spdu_readings')
       .select('source1_kwh, source2_kwh, timestamp');
+    
+    let buildingMeterQuery = supabase.from('building_meter_readings')
+      .select('reading, timestamp');
 
     // Apply date filtering based on the selected range
     switch (dateRange) {
       case 'day':
-        query = query.gte('timestamp', new Date(new Date().setHours(0, 0, 0, 0)).toISOString());
+        // During development, we use March 31, 2023 as the "present day"
+        const developmentDate = new Date(2023, 2, 31); // March 31, 2023
+        const dayStart = new Date(developmentDate);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(developmentDate);
+        dayEnd.setHours(23, 59, 59, 999);
+        
+        spduQuery = spduQuery
+          .gte('timestamp', dayStart.toISOString())
+          .lte('timestamp', dayEnd.toISOString());
+        
+        buildingMeterQuery = buildingMeterQuery
+          .gte('timestamp', dayStart.toISOString())
+          .lte('timestamp', dayEnd.toISOString());
         break;
-      case 'week':
-        const weekAgo = new Date();
-        weekAgo.setDate(weekAgo.getDate() - 7);
-        query = query.gte('timestamp', weekAgo.toISOString());
-        break;
+        
       case 'month':
-        const monthAgo = new Date();
-        monthAgo.setMonth(monthAgo.getMonth() - 1);
-        query = query.gte('timestamp', monthAgo.toISOString());
+        const monthStart = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
+        const monthEnd = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0, 23, 59, 59, 999);
+        
+        spduQuery = spduQuery
+          .gte('timestamp', monthStart.toISOString())
+          .lte('timestamp', monthEnd.toISOString());
+        
+        buildingMeterQuery = buildingMeterQuery
+          .gte('timestamp', monthStart.toISOString())
+          .lte('timestamp', monthEnd.toISOString());
         break;
+        
       case 'custom':
         if (startDate) {
-          query = query.gte('timestamp', startDate.toISOString());
+          const customStart = new Date(startDate);
+          customStart.setHours(0, 0, 0, 0);
+          spduQuery = spduQuery.gte('timestamp', customStart.toISOString());
+          buildingMeterQuery = buildingMeterQuery.gte('timestamp', customStart.toISOString());
         }
         if (endDate) {
-          query = query.lte('timestamp', endDate.toISOString());
+          const customEnd = new Date(endDate);
+          customEnd.setHours(23, 59, 59, 999);
+          spduQuery = spduQuery.lte('timestamp', customEnd.toISOString());
+          buildingMeterQuery = buildingMeterQuery.lte('timestamp', customEnd.toISOString());
         }
         break;
       case 'lifetime':
@@ -115,19 +159,27 @@ const Index = () => {
         break;
     }
 
-    const { data, error } = await query;
-    if (error) throw error;
+    const [spduData, buildingMeterData] = await Promise.all([
+      spduQuery,
+      buildingMeterQuery
+    ]);
 
-    // Calculate solar totals
-    const totalSolar = data?.reduce((sum, item) => sum + Number(item.source2_kwh || 0), 0) || 0;
-    const totalGrid = data?.reduce((sum, item) => sum + Number(item.source1_kwh || 0), 0) || 0;
+    if (spduData.error) throw spduData.error;
+    if (buildingMeterData.error) throw buildingMeterData.error;
+
+    // Calculate solar totals from SPDU readings
+    const totalSolar = spduData.data?.reduce((sum, item) => sum + Number(item.source2_kwh || 0), 0) || 0;
+    const totalGrid = spduData.data?.reduce((sum, item) => sum + Number(item.source1_kwh || 0), 0) || 0;
+    
+    // Add building meter readings if available
+    const buildingMeterTotal = buildingMeterData.data?.reduce((sum, item) => sum + Number(item.reading || 0), 0) || 0;
     
     // Calculate consumed/unused ratios (In a real app, this would be more precise)
     const consumed = totalSolar * 0.95; // 95% of generated solar is consumed
     const unused = totalSolar * 0.05; // 5% unused/lost
 
     return {
-      total: parseFloat(totalSolar.toFixed(2)),
+      total: parseFloat((totalSolar + buildingMeterTotal).toFixed(2)),
       consumed: parseFloat(consumed.toFixed(2)),
       unused: parseFloat(unused.toFixed(2)),
       grid: parseFloat(totalGrid.toFixed(2))
@@ -184,12 +236,14 @@ const Index = () => {
           <UsagePattern 
             dateRange={dateRange} 
             startDate={startDate} 
-            endDate={endDate} 
+            endDate={endDate}
+            selectedMonth={selectedMonth}
           />
           <UsageDetails 
             dateRange={dateRange} 
             startDate={startDate} 
-            endDate={endDate} 
+            endDate={endDate}
+            selectedMonth={selectedMonth}
           />
         </div>
 

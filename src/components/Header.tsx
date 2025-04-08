@@ -34,14 +34,6 @@ const Header = () => {
           </div>
         </div>
 
-        <div className="flex justify-center absolute left-0 right-0 mx-auto w-40 pointer-events-none">
-          <img 
-            src="/lovable-uploads/sun-logo.png" 
-            alt="Logo" 
-            className="h-12" 
-          />
-        </div>
-
         <div className="flex items-center space-x-1 md:space-x-2">
           {user ? (
             <>

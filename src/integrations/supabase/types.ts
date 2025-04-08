@@ -26,7 +26,7 @@ export type Database = {
         Insert: {
           central_device_id?: number | null
           created_at?: string | null
-          id?: never
+          id?: number
           message: string
           notes?: string | null
           project_id?: number | null
@@ -39,7 +39,7 @@ export type Database = {
         Update: {
           central_device_id?: number | null
           created_at?: string | null
-          id?: never
+          id?: number
           message?: string
           notes?: string | null
           project_id?: number | null
@@ -75,13 +75,13 @@ export type Database = {
         }
         Insert: {
           building_meter_id?: number | null
-          id?: never
+          id?: number
           reading?: number | null
           timestamp?: string | null
         }
         Update: {
           building_meter_id?: number | null
-          id?: never
+          id?: number
           reading?: number | null
           timestamp?: string | null
         }
@@ -105,14 +105,14 @@ export type Database = {
         }
         Insert: {
           building_id?: number | null
-          id?: never
+          id?: number
           installation_date?: string | null
           meter_id?: string | null
           meter_type?: string | null
         }
         Update: {
           building_id?: number | null
-          id?: never
+          id?: number
           installation_date?: string | null
           meter_id?: string | null
           meter_type?: string | null
@@ -141,7 +141,7 @@ export type Database = {
           total_apartments: number | null
         }
         Insert: {
-          id?: never
+          id?: number
           name: string
           net_meter_capacity?: number | null
           net_meter_commissioning_date?: string | null
@@ -153,7 +153,7 @@ export type Database = {
           total_apartments?: number | null
         }
         Update: {
-          id?: never
+          id?: number
           name?: string
           net_meter_capacity?: number | null
           net_meter_commissioning_date?: string | null
@@ -212,7 +212,7 @@ export type Database = {
           firmware_version?: string | null
           gateway?: string | null
           hardware_version?: string | null
-          id?: never
+          id?: number
           installation_date?: string | null
           ip_address?: string | null
           name?: string | null
@@ -238,7 +238,7 @@ export type Database = {
           firmware_version?: string | null
           gateway?: string | null
           hardware_version?: string | null
-          id?: never
+          id?: number
           installation_date?: string | null
           ip_address?: string | null
           name?: string | null
@@ -286,7 +286,7 @@ export type Database = {
         Insert: {
           city?: string | null
           created_at?: string | null
-          id?: never
+          id?: number
           image_url?: string | null
           latitude?: number | null
           location?: string | null
@@ -298,7 +298,7 @@ export type Database = {
         Update: {
           city?: string | null
           created_at?: string | null
-          id?: never
+          id?: number
           image_url?: string | null
           latitude?: number | null
           location?: string | null
@@ -313,26 +313,26 @@ export type Database = {
         Row: {
           active_power: number | null
           apparent_power: number | null
-          balance_kwh: number | null
+          balance_kwh: string | null
           date: number | null
           date_of_monthly_billing: number | null
           day_limit_kwh: number | null
-          hour: number | null
+          hour: string | null
           id: number
-          load_current: number | null
+          load_current: string | null
           load_vrn: number | null
-          minute: number | null
+          minute: string | null
           mode_of_operation: number | null
           month: number | null
           month_limit_kwh: number | null
-          second: number | null
+          second: string | null
           solar_end_time_hour: number | null
-          solar_end_time_minute: number | null
-          solar_start_time_hour: number | null
-          solar_start_time_minute: number | null
+          solar_end_time_minute: string | null
+          solar_start_time_hour: string | null
+          solar_start_time_minute: string | null
           source_of_load: number | null
-          source1_kwh: number | null
-          source2_kwh: number | null
+          source1_kwh: string | null
+          source2_kwh: string | null
           spdu_id: string | null
           timestamp: string | null
           vrn_s1: number | null
@@ -341,26 +341,26 @@ export type Database = {
         Insert: {
           active_power?: number | null
           apparent_power?: number | null
-          balance_kwh?: number | null
+          balance_kwh?: string | null
           date?: number | null
           date_of_monthly_billing?: number | null
           day_limit_kwh?: number | null
-          hour?: number | null
-          id?: never
-          load_current?: number | null
+          hour?: string | null
+          id?: number
+          load_current?: string | null
           load_vrn?: number | null
-          minute?: number | null
+          minute?: string | null
           mode_of_operation?: number | null
           month?: number | null
           month_limit_kwh?: number | null
-          second?: number | null
+          second?: string | null
           solar_end_time_hour?: number | null
-          solar_end_time_minute?: number | null
-          solar_start_time_hour?: number | null
-          solar_start_time_minute?: number | null
+          solar_end_time_minute?: string | null
+          solar_start_time_hour?: string | null
+          solar_start_time_minute?: string | null
           source_of_load?: number | null
-          source1_kwh?: number | null
-          source2_kwh?: number | null
+          source1_kwh?: string | null
+          source2_kwh?: string | null
           spdu_id?: string | null
           timestamp?: string | null
           vrn_s1?: number | null
@@ -369,26 +369,26 @@ export type Database = {
         Update: {
           active_power?: number | null
           apparent_power?: number | null
-          balance_kwh?: number | null
+          balance_kwh?: string | null
           date?: number | null
           date_of_monthly_billing?: number | null
           day_limit_kwh?: number | null
-          hour?: number | null
-          id?: never
-          load_current?: number | null
+          hour?: string | null
+          id?: number
+          load_current?: string | null
           load_vrn?: number | null
-          minute?: number | null
+          minute?: string | null
           mode_of_operation?: number | null
           month?: number | null
           month_limit_kwh?: number | null
-          second?: number | null
+          second?: string | null
           solar_end_time_hour?: number | null
-          solar_end_time_minute?: number | null
-          solar_start_time_hour?: number | null
-          solar_start_time_minute?: number | null
+          solar_end_time_minute?: string | null
+          solar_start_time_hour?: string | null
+          solar_start_time_minute?: string | null
           source_of_load?: number | null
-          source1_kwh?: number | null
-          source2_kwh?: number | null
+          source1_kwh?: string | null
+          source2_kwh?: string | null
           spdu_id?: string | null
           timestamp?: string | null
           vrn_s1?: number | null
@@ -400,9 +400,10 @@ export type Database = {
         Row: {
           central_device_id: number | null
           daily_limit: number | null
-          flat_no: string | null
+          flat_no: number | null
           id: number
           monthly_limit: number | null
+          owner_mobile: string | null
           owner_name: string | null
           phase: string | null
           spdu_id: string | null
@@ -412,9 +413,10 @@ export type Database = {
         Insert: {
           central_device_id?: number | null
           daily_limit?: number | null
-          flat_no?: string | null
-          id?: never
+          flat_no?: number | null
+          id?: number
           monthly_limit?: number | null
+          owner_mobile?: string | null
           owner_name?: string | null
           phase?: string | null
           spdu_id?: string | null
@@ -424,24 +426,17 @@ export type Database = {
         Update: {
           central_device_id?: number | null
           daily_limit?: number | null
-          flat_no?: string | null
-          id?: never
+          flat_no?: number | null
+          id?: number
           monthly_limit?: number | null
+          owner_mobile?: string | null
           owner_name?: string | null
           phase?: string | null
           spdu_id?: string | null
           spdu_type?: string | null
           status?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "spdus_central_device_id_fkey"
-            columns: ["central_device_id"]
-            isOneToOne: false
-            referencedRelation: "central_devices"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       users: {
         Row: {

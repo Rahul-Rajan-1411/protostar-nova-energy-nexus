@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
+import React, { useEffect, ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 
 interface RequireAuthProps {
-  children: React.ReactNode;
+  children: ReactNode;
   allowedRoles?: string[];
 }
 

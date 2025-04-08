@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import {
   Select,
@@ -68,8 +67,6 @@ const DateSelector = ({ onDateRangeChange }: DateSelectorProps) => {
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="day">Day</SelectItem>
-          <SelectItem value="week">Week</SelectItem>
-          <SelectItem value="month">Month</SelectItem>
           <SelectItem value="custom">Custom Range</SelectItem>
           <SelectItem value="lifetime">Lifetime</SelectItem>
         </SelectContent>

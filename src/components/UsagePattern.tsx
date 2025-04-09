@@ -29,103 +29,71 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
     const fetchUsageData = async () => {
       try {
         setLoading(true);
-        let query = supabase.from('spdu_readings')
-          .select('source1_kwh, source2_kwh, timestamp');
-
-        // Apply date filtering based on the selected range
-        switch (dateRange) {
-          case 'day':
-            // During development, we use March 31, 2023 as the "present day"
-            if (startDate) {
-              const dayStart = new Date(startDate);
-              dayStart.setHours(0, 0, 0, 0);
-              const dayEnd = new Date(startDate);
-              dayEnd.setHours(23, 59, 59, 999);
-              
-              query = query
-                .gte('timestamp', dayStart.toISOString())
-                .lte('timestamp', dayEnd.toISOString());
-            } else {
-              // Default to March 31, 2023 during development
-              const defaultDay = new Date(2023, 2, 31); // March 31, 2023
-              const dayStart = new Date(defaultDay);
-              dayStart.setHours(0, 0, 0, 0);
-              const dayEnd = new Date(defaultDay);
-              dayEnd.setHours(23, 59, 59, 999);
-              
-              query = query
-                .gte('timestamp', dayStart.toISOString())
-                .lte('timestamp', dayEnd.toISOString());
-            }
-            break;
+        
+        // Format date range
+        const { formattedStartDate, formattedEndDate } = formatDateRange(dateRange, startDate, endDate, selectedMonth);
+        
+        // Get SPDU readings for the period
+        const startQuery = supabase
+          .from('spdu_readings')
+          .select('spdu_id, source1_kwh, source2_kwh, timestamp')
+          .gte('timestamp', formattedStartDate)
+          .order('timestamp', { ascending: true });
+          
+        const endQuery = supabase
+          .from('spdu_readings')
+          .select('spdu_id, source1_kwh, source2_kwh, timestamp')
+          .lte('timestamp', formattedEndDate)
+          .order('timestamp', { ascending: false });
+        
+        const [startResponse, endResponse] = await Promise.all([startQuery, endQuery]);
+        
+        if (startResponse.error) throw startResponse.error;
+        if (endResponse.error) throw endResponse.error;
+        
+        const startReadings = startResponse.data || [];
+        const endReadings = endResponse.data || [];
+        
+        // Calculate solar and grid consumption
+        let solarValue = 0;
+        let gridValue = 0;
+        
+        if (startReadings.length > 0 && endReadings.length > 0) {
+          // Group readings by SPDU ID
+          const startReadingBySpduId = groupBy(startReadings, 'spdu_id');
+          const endReadingBySpduId = groupBy(endReadings, 'spdu_id');
+          
+          // Get unique SPDU IDs
+          const spduIds = [...new Set([
+            ...Object.keys(startReadingBySpduId),
+            ...Object.keys(endReadingBySpduId)
+          ])];
+          
+          // Calculate difference for each SPDU
+          spduIds.forEach(spduId => {
+            const start = startReadingBySpduId[spduId]?.[0];
+            const end = endReadingBySpduId[spduId]?.[0];
             
-          case 'month':
-            if (selectedMonth) {
-              const monthStart = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth(), 1);
-              const monthEnd = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 0, 23, 59, 59, 999);
-              
-              query = query
-                .gte('timestamp', monthStart.toISOString())
-                .lte('timestamp', monthEnd.toISOString());
-            } else {
-              // Default to March 2023 during development
-              const defaultMonth = new Date(2023, 2, 1); // March 2023
-              const monthStart = new Date(defaultMonth);
-              const monthEnd = new Date(2023, 2 + 1, 0, 23, 59, 59, 999);
-              
-              query = query
-                .gte('timestamp', monthStart.toISOString())
-                .lte('timestamp', monthEnd.toISOString());
+            if (start && end) {
+              solarValue += (Number(end.source2_kwh) - Number(start.source2_kwh));
+              gridValue += (Number(end.source1_kwh) - Number(start.source1_kwh));
+            } else if (end && !start) {
+              // If we only have end readings, just use those (lifetime case)
+              solarValue += Number(end.source2_kwh);
+              gridValue += Number(end.source1_kwh);
             }
-            break;
-            
-          case 'custom':
-            if (startDate) {
-              const customStart = new Date(startDate);
-              customStart.setHours(0, 0, 0, 0);
-              query = query.gte('timestamp', customStart.toISOString());
-            }
-            if (endDate) {
-              const customEnd = new Date(endDate);
-              customEnd.setHours(23, 59, 59, 999);
-              query = query.lte('timestamp', customEnd.toISOString());
-            }
-            break;
-            
-          case 'lifetime':
-            // No date filtering for lifetime
-            break;
+          });
+        } else if (endReadings.length > 0) {
+          // If we only have end readings (for lifetime view), sum them up
+          solarValue = endReadings.reduce((sum, item) => sum + Number(item.source2_kwh || 0), 0);
+          gridValue = endReadings.reduce((sum, item) => sum + Number(item.source1_kwh || 0), 0);
         }
-
-        const { data, error } = await query;
-
-        if (error) {
-          throw error;
-        }
-
-        if (data && data.length > 0) {
-          // Calculate totals
-          const totals = data.reduce(
-            (acc, reading) => {
-              acc.solar += Number(reading.source2_kwh || 0);
-              acc.grid += Number(reading.source1_kwh || 0);
-              return acc;
-            },
-            { solar: 0, grid: 0 }
-          );
-
-          // Update chart data
-          setChartData([
-            { name: 'Solar', value: parseFloat(totals.solar.toFixed(2)), color: '#27ae60' },
-            { name: 'Grid', value: parseFloat(totals.grid.toFixed(2)), color: '#e74c3c' },
-          ]);
-        } else {
-          // No data, reset chart
-          setChartData([
-            { name: 'Solar', value: 0, color: '#27ae60' },
-            { name: 'Grid', value: 0, color: '#e74c3c' },
-          ]);
-        }
+        
+        // Update chart data
+        setChartData([
+          { name: 'Solar', value: parseFloat(solarValue.toFixed(2)), color: '#27ae60' },
+          { name: 'Grid', value: parseFloat(gridValue.toFixed(2)), color: '#e74c3c' },
+        ]);
       } catch (error) {
         console.error('Error fetching usage data:', error);
         toast({
@@ -140,6 +108,74 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
 
     fetchUsageData();
   }, [dateRange, startDate, endDate, selectedMonth]);
+
+  // Helper function to format date range
+  const formatDateRange = (dateRange: DateRangeType, startDate?: Date, endDate?: Date, selectedMonth?: Date) => {
+    let formattedStartDate: string;
+    let formattedEndDate: string;
+
+    // Default date during development
+    const developmentDate = new Date(2023, 2, 31); // March 31, 2023
+
+    switch (dateRange) {
+      case 'day':
+        const dayDate = startDate || developmentDate;
+        const dayStart = new Date(dayDate);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(dayDate);
+        dayEnd.setHours(23, 59, 59, 999);
+        
+        formattedStartDate = dayStart.toISOString();
+        formattedEndDate = dayEnd.toISOString();
+        break;
+        
+      case 'month':
+        const monthDate = selectedMonth || new Date(2023, 2, 1); // March 2023
+        const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+        const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
+        
+        formattedStartDate = monthStart.toISOString();
+        formattedEndDate = monthEnd.toISOString();
+        break;
+        
+      case 'custom':
+        if (startDate) {
+          const customStart = new Date(startDate);
+          customStart.setHours(0, 0, 0, 0);
+          formattedStartDate = customStart.toISOString();
+        } else {
+          formattedStartDate = new Date(2023, 0, 1).toISOString(); // Default to Jan 1, 2023
+        }
+        
+        if (endDate) {
+          const customEnd = new Date(endDate);
+          customEnd.setHours(23, 59, 59, 999);
+          formattedEndDate = customEnd.toISOString();
+        } else {
+          formattedEndDate = new Date(2023, 11, 31, 23, 59, 59, 999).toISOString(); // Default to Dec 31, 2023
+        }
+        break;
+        
+      case 'lifetime':
+      default:
+        // For lifetime, get all data (use a very old start date)
+        formattedStartDate = new Date(2000, 0, 1).toISOString();
+        formattedEndDate = new Date(2050, 11, 31, 23, 59, 59, 999).toISOString();
+        break;
+    }
+    
+    return { formattedStartDate, formattedEndDate };
+  };
+
+  // Helper function to group array by key
+  const groupBy = <T extends Record<string, any>>(array: T[], key: keyof T): Record<string, T[]> => {
+    return array.reduce((result, item) => {
+      const groupKey = String(item[key]);
+      result[groupKey] = result[groupKey] || [];
+      result[groupKey].push(item);
+      return result;
+    }, {} as Record<string, T[]>);
+  };
 
   // Custom tooltip
   const CustomTooltip = ({ active, payload }: any) => {

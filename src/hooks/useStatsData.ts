@@ -60,87 +60,116 @@ export const useStatsData = (
       // Extract meter IDs
       const meterIds = solarMeters.map(meter => meter.id);
       
-      // Now query the readings based on the meter IDs and date filters
-      let readingsQuery = supabase
+      // Format date range for query
+      const { formattedStartDate, formattedEndDate } = formatDateRange(dateRange, startDate, endDate, selectedMonth);
+      
+      // Get earliest readings after start date for solar meters
+      const { data: startReadings, error: startReadingsError } = await supabase
         .from('building_meter_readings')
-        .select('reading, building_meter_id, timestamp')
-        .in('building_meter_id', meterIds);
+        .select('building_meter_id, reading, timestamp')
+        .in('building_meter_id', meterIds)
+        .gte('timestamp', formattedStartDate)
+        .order('timestamp', { ascending: true })
+        .limit(meterIds.length);
       
-      // Also get SPDU readings for grid power
-      let spduQuery = supabase
+      if (startReadingsError) throw startReadingsError;
+      
+      // Get latest readings before end date for solar meters
+      const { data: endReadings, error: endReadingsError } = await supabase
+        .from('building_meter_readings')
+        .select('building_meter_id, reading, timestamp')
+        .in('building_meter_id', meterIds)
+        .lte('timestamp', formattedEndDate)
+        .order('timestamp', { ascending: false })
+        .limit(meterIds.length);
+      
+      if (endReadingsError) throw endReadingsError;
+      
+      // Get SPDU readings for the same period
+      const { data: spduStartReadings, error: spduStartError } = await supabase
         .from('spdu_readings')
-        .select('source1_kwh, source2_kwh, timestamp');
+        .select('spdu_id, source1_kwh, source2_kwh, timestamp')
+        .gte('timestamp', formattedStartDate)
+        .order('timestamp', { ascending: true });
       
-      // Apply date filtering based on the selected range
-      switch (dateRange) {
-        case 'day':
-          // During development, we use March 31, 2023 as the "present day"
-          const developmentDate = new Date(2023, 2, 31); // March 31, 2023
-          const dayStart = new Date(developmentDate);
-          dayStart.setHours(0, 0, 0, 0);
-          const dayEnd = new Date(developmentDate);
-          dayEnd.setHours(23, 59, 59, 999);
+      if (spduStartError) throw spduStartError;
+      
+      const { data: spduEndReadings, error: spduEndError } = await supabase
+        .from('spdu_readings')
+        .select('spdu_id, source1_kwh, source2_kwh, timestamp')
+        .lte('timestamp', formattedEndDate)
+        .order('timestamp', { ascending: false });
+      
+      if (spduEndError) throw spduEndError;
+      
+      // Calculate total solar generation (difference between first and last readings)
+      let totalSolarGeneration = 0;
+      if (endReadings && startReadings && endReadings.length > 0 && startReadings.length > 0) {
+        // Group readings by meter ID
+        const startReadingByMeterId = groupBy(startReadings, 'building_meter_id');
+        const endReadingByMeterId = groupBy(endReadings, 'building_meter_id');
+        
+        // Calculate the difference for each meter
+        meterIds.forEach(meterId => {
+          const start = startReadingByMeterId[meterId]?.[0];
+          const end = endReadingByMeterId[meterId]?.[0];
           
-          readingsQuery = readingsQuery
-            .gte('timestamp', dayStart.toISOString())
-            .lte('timestamp', dayEnd.toISOString());
-          
-          spduQuery = spduQuery
-            .gte('timestamp', dayStart.toISOString())
-            .lte('timestamp', dayEnd.toISOString());
-          break;
-          
-        case 'month':
-          const monthStart = new Date(selectedMonth?.getFullYear() || 2023, selectedMonth?.getMonth() || 2, 1);
-          const monthEnd = new Date(selectedMonth?.getFullYear() || 2023, (selectedMonth?.getMonth() || 2) + 1, 0, 23, 59, 59, 999);
-          
-          readingsQuery = readingsQuery
-            .gte('timestamp', monthStart.toISOString())
-            .lte('timestamp', monthEnd.toISOString());
-          
-          spduQuery = spduQuery
-            .gte('timestamp', monthStart.toISOString())
-            .lte('timestamp', monthEnd.toISOString());
-          break;
-          
-        case 'custom':
-          if (startDate) {
-            const customStart = new Date(startDate);
-            customStart.setHours(0, 0, 0, 0);
-            readingsQuery = readingsQuery.gte('timestamp', customStart.toISOString());
-            spduQuery = spduQuery.gte('timestamp', customStart.toISOString());
+          if (start && end) {
+            totalSolarGeneration += (Number(end.reading) - Number(start.reading));
+          } else if (end && !start) {
+            // If we only have end readings, just use those (lifetime case)
+            totalSolarGeneration += Number(end.reading);
           }
-          if (endDate) {
-            const customEnd = new Date(endDate);
-            customEnd.setHours(23, 59, 59, 999);
-            readingsQuery = readingsQuery.lte('timestamp', customEnd.toISOString());
-            spduQuery = spduQuery.lte('timestamp', customEnd.toISOString());
-          }
-          break;
-        case 'lifetime':
-          // No date filtering for lifetime
-          break;
+        });
+      } else if (endReadings && endReadings.length > 0) {
+        // If we only have end readings (for lifetime view), sum them up
+        totalSolarGeneration = endReadings.reduce((sum, item) => sum + Number(item.reading || 0), 0);
       }
-
-      const [readingsResponse, spduResponse] = await Promise.all([
-        readingsQuery,
-        spduQuery
-      ]);
       
-      if (readingsResponse.error) throw readingsResponse.error;
-      if (spduResponse.error) throw spduResponse.error;
+      // Calculate SPDU consumption (solar and grid)
+      let totalSolarFromSPDU = 0;
+      let totalGrid = 0;
       
-      // Sum up the solar generation readings
-      const totalSolarGeneration = readingsResponse.data?.reduce((sum, item) => sum + Number(item.reading || 0), 0) || 0;
+      if (spduEndReadings && spduStartReadings && spduEndReadings.length > 0 && spduStartReadings.length > 0) {
+        // Group readings by SPDU ID
+        const startReadingBySpduId = groupBy(spduStartReadings, 'spdu_id');
+        const endReadingBySpduId = groupBy(spduEndReadings, 'spdu_id');
+        
+        // Get unique SPDU IDs
+        const spduIds = [...new Set([
+          ...Object.keys(startReadingBySpduId),
+          ...Object.keys(endReadingBySpduId)
+        ])];
+        
+        // Calculate difference for each SPDU
+        spduIds.forEach(spduId => {
+          const start = startReadingBySpduId[spduId]?.[0];
+          const end = endReadingBySpduId[spduId]?.[0];
+          
+          if (start && end) {
+            totalSolarFromSPDU += (Number(end.source2_kwh) - Number(start.source2_kwh));
+            totalGrid += (Number(end.source1_kwh) - Number(start.source1_kwh));
+          } else if (end && !start) {
+            // If we only have end readings, just use those (lifetime case)
+            totalSolarFromSPDU += Number(end.source2_kwh);
+            totalGrid += Number(end.source1_kwh);
+          }
+        });
+      } else if (spduEndReadings && spduEndReadings.length > 0) {
+        // If we only have end readings (for lifetime view), sum them up
+        totalSolarFromSPDU = spduEndReadings.reduce((sum, item) => sum + Number(item.source2_kwh || 0), 0);
+        totalGrid = spduEndReadings.reduce((sum, item) => sum + Number(item.source1_kwh || 0), 0);
+      }
       
-      // Add SPDU readings if available
-      const totalSolarFromSPDU = spduResponse.data?.reduce((sum, item) => sum + Number(item.source2_kwh || 0), 0) || 0;
-      const totalGrid = spduResponse.data?.reduce((sum, item) => sum + Number(item.source1_kwh || 0), 0) || 0;
+      // Convert to MWh (divide by 1000)
+      totalSolarGeneration = totalSolarGeneration / 1000;
+      totalSolarFromSPDU = totalSolarFromSPDU / 1000;
+      totalGrid = totalGrid / 1000;
       
       // Total solar is the sum from both sources
       const totalSolar = totalSolarGeneration + totalSolarFromSPDU;
       
-      // Calculate consumed/unused ratios (In a real app, this would be more precise)
+      // Calculate consumed/unused ratios (use 95% consumed as in the original code)
       const consumed = totalSolar * 0.95; // 95% of generated solar is consumed
       const unused = totalSolar * 0.05; // 5% unused/lost
 
@@ -159,6 +188,74 @@ export const useStatsData = (
         grid: 0
       };
     }
+  };
+
+  // Helper function to format date range
+  const formatDateRange = (dateRange: DateRangeType, startDate?: Date, endDate?: Date, selectedMonth?: Date) => {
+    let formattedStartDate: string;
+    let formattedEndDate: string;
+
+    // Default date during development
+    const developmentDate = new Date(2023, 2, 31); // March 31, 2023
+
+    switch (dateRange) {
+      case 'day':
+        const dayDate = startDate || developmentDate;
+        const dayStart = new Date(dayDate);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(dayDate);
+        dayEnd.setHours(23, 59, 59, 999);
+        
+        formattedStartDate = dayStart.toISOString();
+        formattedEndDate = dayEnd.toISOString();
+        break;
+        
+      case 'month':
+        const monthDate = selectedMonth || new Date(2023, 2, 1); // March 2023
+        const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+        const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
+        
+        formattedStartDate = monthStart.toISOString();
+        formattedEndDate = monthEnd.toISOString();
+        break;
+        
+      case 'custom':
+        if (startDate) {
+          const customStart = new Date(startDate);
+          customStart.setHours(0, 0, 0, 0);
+          formattedStartDate = customStart.toISOString();
+        } else {
+          formattedStartDate = new Date(2023, 0, 1).toISOString(); // Default to Jan 1, 2023
+        }
+        
+        if (endDate) {
+          const customEnd = new Date(endDate);
+          customEnd.setHours(23, 59, 59, 999);
+          formattedEndDate = customEnd.toISOString();
+        } else {
+          formattedEndDate = new Date(2023, 11, 31, 23, 59, 59, 999).toISOString(); // Default to Dec 31, 2023
+        }
+        break;
+        
+      case 'lifetime':
+      default:
+        // For lifetime, get all data (use a very old start date)
+        formattedStartDate = new Date(2000, 0, 1).toISOString();
+        formattedEndDate = new Date(2050, 11, 31, 23, 59, 59, 999).toISOString();
+        break;
+    }
+    
+    return { formattedStartDate, formattedEndDate };
+  };
+
+  // Helper function to group array by key
+  const groupBy = <T extends Record<string, any>>(array: T[], key: keyof T): Record<string, T[]> => {
+    return array.reduce((result, item) => {
+      const groupKey = String(item[key]);
+      result[groupKey] = result[groupKey] || [];
+      result[groupKey].push(item);
+      return result;
+    }, {} as Record<string, T[]>);
   };
 
   // Query to fetch stats data

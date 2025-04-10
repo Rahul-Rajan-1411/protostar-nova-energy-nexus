@@ -136,9 +136,14 @@ export const useStatsData = (
         
         if (projectStatsError) throw projectStatsError;
         
-        // Fetch energy data using RPC with lowercase date range
+        // Convert dateRange to uppercase first letter format as required by the Supabase function
+        // The SQL function expects 'Day', 'Month', 'Custom', 'Lifetime' formats
+        const formattedDateRange = dateRange.charAt(0).toUpperCase() + dateRange.slice(1);
+        console.log('Using date range format:', formattedDateRange);
+        
+        // Fetch energy data using RPC with properly formatted date range
         const { data: energyData, error: energyError } = await supabase.rpc('get_energy_data', {
-          p_date_range: dateRange.toLowerCase(), // Make sure dateRange is lowercase
+          p_date_range: formattedDateRange, // Format to match what the SQL function expects
           p_start_date: formattedStartDate,
           p_end_date: formattedEndDate
         }) as { data: EnergyData | null, error: any };

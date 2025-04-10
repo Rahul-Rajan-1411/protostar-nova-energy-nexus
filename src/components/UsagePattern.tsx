@@ -39,9 +39,13 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
         // Format date range
         const { formattedStartDate, formattedEndDate } = formatDateRange(dateRange, startDate, endDate, selectedMonth);
         
-        // Call Supabase to get energy data using the stored function with lowercase date range
+        // Convert dateRange to uppercase first letter format as required by the Supabase function
+        const formattedDateRange = dateRange.charAt(0).toUpperCase() + dateRange.slice(1);
+        console.log('Usage Pattern using date range format:', formattedDateRange);
+        
+        // Call Supabase to get energy data using the stored function with properly formatted date range
         const { data, error } = await supabase.rpc('get_energy_data', {
-          p_date_range: dateRange.toLowerCase(), // Make sure dateRange is lowercase
+          p_date_range: formattedDateRange,
           p_start_date: formattedStartDate,
           p_end_date: formattedEndDate
         }) as { data: EnergyData | null, error: any };
@@ -52,8 +56,8 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
           console.log('Energy data from RPC:', data);
           
           // Update chart data
-          const solarValue = Number(data.distributed) || 0;
-          const gridValue = Number(data.gridConsumed) || 0;
+          const solarValue = Number(data.distributed || 0);
+          const gridValue = Number(data.gridConsumed || 0);
           
           setChartData([
             { name: 'Solar', value: solarValue, color: '#27ae60' },

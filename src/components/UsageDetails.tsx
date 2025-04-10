@@ -28,6 +28,16 @@ interface UsageData {
   gridConsumed: number;
 }
 
+interface EnergyData {
+  generated: number;
+  consumed: number;
+  distributed: number;
+  commonUtilities: number;
+  unused: number;
+  gridConsumed: number;
+  [key: string]: any;
+}
+
 const UsageDetailRow = ({ label, value, color, indent = false, bold = false }: UsageDetailRowProps) => {
   return (
     <div className={`flex items-center justify-between mb-5 ${indent ? 'ml-6' : ''}`}>
@@ -64,7 +74,7 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
           p_date_range: dateRange,
           p_start_date: formattedStartDate,
           p_end_date: formattedEndDate
-        });
+        }) as { data: EnergyData | null, error: any };
         
         if (error) throw error;
         

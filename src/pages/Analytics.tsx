@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import Header from '@/components/Header';
 import DateSelector, { DateRangeType } from '@/components/DateSelector';
@@ -34,7 +33,7 @@ const Analytics = () => {
       setEndDate(undefined);
     }
   };
-
+  
   // Format the current date for display
   const formattedCurrentDate = format(currentDate, 'dd/MM/yyyy');
 

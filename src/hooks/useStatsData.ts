@@ -28,6 +28,34 @@ export interface StatsData {
   };
 }
 
+// Define the types for our Supabase RPC functions
+interface EnergyData {
+  generated: number;
+  consumed: number;
+  distributed: number;
+  commonUtilities: number;
+  unused: number;
+  gridConsumed: number;
+}
+
+interface ProjectStats {
+  projects: {
+    total: number;
+    active: number;
+    inactive: number;
+  };
+  spdus: {
+    total: number;
+    active: number;
+    inactive: number;
+  };
+  centralDevices: {
+    total: number;
+    active: number;
+    inactive: number;
+  };
+}
+
 export const useStatsData = (
   dateRange: DateRangeType,
   startDate?: Date,
@@ -103,7 +131,7 @@ export const useStatsData = (
         const { formattedStartDate, formattedEndDate } = formatDateRange(dateRange, startDate, endDate, selectedMonth);
         
         // Fetch project stats using RPC
-        const { data: projectStatsData, error: projectStatsError } = await supabase.rpc('get_project_stats');
+        const { data: projectStatsData, error: projectStatsError } = await supabase.rpc('get_project_stats') as { data: ProjectStats | null, error: any };
         
         if (projectStatsError) throw projectStatsError;
         
@@ -112,7 +140,7 @@ export const useStatsData = (
           p_date_range: dateRange,
           p_start_date: formattedStartDate,
           p_end_date: formattedEndDate
-        });
+        }) as { data: EnergyData | null, error: any };
         
         if (energyError) throw energyError;
         

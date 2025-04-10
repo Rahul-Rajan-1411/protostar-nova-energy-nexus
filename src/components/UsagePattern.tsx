@@ -18,6 +18,12 @@ interface ChartData {
   color: string;
 }
 
+interface EnergyData {
+  distributed: number;
+  gridConsumed: number;
+  [key: string]: any;
+}
+
 const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePatternProps) => {
   const [chartData, setChartData] = useState<ChartData[]>([
     { name: 'Solar', value: 0, color: '#27ae60' },
@@ -38,7 +44,7 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
           p_date_range: dateRange,
           p_start_date: formattedStartDate,
           p_end_date: formattedEndDate
-        });
+        }) as { data: EnergyData | null, error: any };
         
         if (error) throw error;
         

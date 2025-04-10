@@ -1,4 +1,3 @@
-
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
@@ -79,8 +78,9 @@ export const useStatsData = (
         const dayEnd = new Date(dayDate);
         dayEnd.setHours(23, 59, 59, 999);
         
-        formattedStartDate = dayStart.toISOString();
-        formattedEndDate = dayEnd.toISOString();
+        // Format as YYYY-MM-DD HH:mm:ss without timezone
+        formattedStartDate = dayStart.toISOString().split('T')[0] + ' 00:00:00';
+        formattedEndDate = dayEnd.toISOString().split('T')[0] + ' 23:59:59.999';
         break;
         
       case 'month':
@@ -88,33 +88,34 @@ export const useStatsData = (
         const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
         const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
         
-        formattedStartDate = monthStart.toISOString();
-        formattedEndDate = monthEnd.toISOString();
+        // Format as YYYY-MM-DD HH:mm:ss without timezone
+        formattedStartDate = monthStart.toISOString().split('T')[0] + ' 00:00:00';
+        formattedEndDate = monthEnd.toISOString().split('T')[0] + ' 23:59:59.999';
         break;
         
       case 'custom':
         if (startDate) {
           const customStart = new Date(startDate);
           customStart.setHours(0, 0, 0, 0);
-          formattedStartDate = customStart.toISOString();
+          formattedStartDate = customStart.toISOString().split('T')[0] + ' 00:00:00';
         } else {
-          formattedStartDate = new Date(2024, 0, 1).toISOString(); // Default to Jan 1, 2024
+          formattedStartDate = '2024-01-01 00:00:00'; // Default to Jan 1, 2024
         }
         
         if (endDate) {
           const customEnd = new Date(endDate);
           customEnd.setHours(23, 59, 59, 999);
-          formattedEndDate = customEnd.toISOString();
+          formattedEndDate = customEnd.toISOString().split('T')[0] + ' 23:59:59.999';
         } else {
-          formattedEndDate = new Date(2024, 11, 31, 23, 59, 59, 999).toISOString(); // Default to Dec 31, 2024
+          formattedEndDate = '2024-12-31 23:59:59.999'; // Default to Dec 31, 2024
         }
         break;
         
       case 'lifetime':
       default:
         // For lifetime, get all data (use a very old start date)
-        formattedStartDate = new Date(2000, 0, 1).toISOString();
-        formattedEndDate = new Date(2050, 11, 31, 23, 59, 59, 999).toISOString();
+        formattedStartDate = '2000-01-01 00:00:00';
+        formattedEndDate = '2050-12-31 23:59:59.999';
         break;
     }
     
@@ -151,6 +152,11 @@ export const useStatsData = (
         
         // Fetch energy data using RPC with properly formatted date range
         console.log('Fetching energy data...');
+        console.log('RPC Parameters:', {
+          p_date_range: formattedDateRange,
+          p_start_date: formattedStartDate,
+          p_end_date: formattedEndDate
+        });
         const { data: energyData, error: energyError } = await supabase.rpc('get_energy_data', {
           p_date_range: formattedDateRange,
           p_start_date: formattedStartDate,
@@ -162,12 +168,13 @@ export const useStatsData = (
           throw energyError;
         }
         
-        console.log('Energy data from RPC:', energyData);
+        console.log('Raw Energy data from RPC:', JSON.stringify(energyData, null, 2));
         
         // Type assertions with proper casting - first cast to unknown, then to the specific type
         // This addresses the TypeScript error by making the type conversion explicit
         const typedProjectStats = projectStatsData as unknown as ProjectStats;
         const typedEnergyData = energyData as unknown as EnergyData;
+        console.log('Typed Energy data:', JSON.stringify(typedEnergyData, null, 2));
         
         // Organize the data with type safety
         const projects = typedProjectStats?.projects || { total: 0, active: 0, inactive: 0 };
@@ -187,6 +194,7 @@ export const useStatsData = (
             unused: Number(typedEnergyData?.unused || 0),
             grid: Number(typedEnergyData?.gridConsumed || 0)
           };
+        console.log('Processed Solar Data:', JSON.stringify(solar, null, 2));
 
         const result: StatsData = {
           projects,
@@ -195,7 +203,7 @@ export const useStatsData = (
           solar
         };
         
-        console.log('Final stats result:', result);
+        console.log('Final stats result:', JSON.stringify(result, null, 2));
         return result;
       } catch (error) {
         console.error('Error fetching stats:', error);

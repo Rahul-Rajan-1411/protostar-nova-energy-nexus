@@ -1,0 +1,216 @@
+-- Updated get_projects_data SQL function with image_url fix
+CREATE OR REPLACE FUNCTION get_projects_data()
+RETURNS TABLE (
+    id BIGINT,
+    name TEXT,
+    location TEXT,
+    city TEXT,
+    latitude NUMERIC,
+    longitude NUMERIC,
+    total_central_devices BIGINT,
+    active_central_devices BIGINT,
+    total_spdus BIGINT,
+    active_spdus BIGINT,
+    last_data_packet TIMESTAMP WITH TIME ZONE,
+    image_url TEXT,  -- Ensure this field is properly returned
+    solar_generated NUMERIC,
+    common_utilities NUMERIC,
+    solar_distributed NUMERIC,
+    total_solar_capacity NUMERIC,
+    total_net_meter_capacity NUMERIC,
+    solar_panels_make TEXT,
+    solar_inverter_make TEXT,
+    net_meter_commissioning_date TEXT,
+    total_buildings BIGINT,
+    total_apartments NUMERIC,
+    grid_power_used NUMERIC,
+    first_data_recording_date TIMESTAMP WITH TIME ZONE,
+    solar_system_health_ratio NUMERIC,
+    building_last_data_packets JSONB,
+    status TEXT
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH latest_meter_readings AS (
+        SELECT 
+            bm.building_id,
+            bm.meter_type,
+            MAX(bmr.reading::NUMERIC) as latest_reading
+        FROM 
+            building_meters bm
+        JOIN 
+            building_meter_readings bmr ON bm.id = bmr.building_meter_id
+        GROUP BY 
+            bm.building_id, bm.meter_type
+    ),
+    project_energy_data AS (
+        SELECT
+            b.project_id,
+            SUM(CASE WHEN lmr.meter_type = 'solar_generation' THEN lmr.latest_reading ELSE 0 END) as total_solar_generated,
+            SUM(CASE WHEN lmr.meter_type = 'common_utilities' THEN lmr.latest_reading ELSE 0 END) as total_common_utilities
+        FROM
+            buildings b
+        JOIN
+            latest_meter_readings lmr ON b.id = lmr.building_id
+        GROUP BY
+            b.project_id
+    ),
+    spdu_consumption AS (
+        SELECT
+            cd.project_id,
+            SUM(sr.source2_kwh::NUMERIC) as total_solar_distributed
+        FROM
+            central_devices cd
+        JOIN
+            spdus s ON cd.id = s.central_device_id
+        JOIN
+            spdu_readings sr ON s.spdu_id = sr.spdu_id
+        WHERE
+            sr.timestamp = (SELECT MAX(timestamp) FROM spdu_readings)
+        GROUP BY
+            cd.project_id
+    ),
+    project_details AS (
+        SELECT
+            p.id AS project_id,
+            SUM(b.solar_pv_capacity::NUMERIC) AS total_solar_capacity,
+            SUM(b.net_meter_capacity::NUMERIC) AS total_net_meter_capacity,
+            STRING_AGG(DISTINCT b.solar_panels_make, ', ') AS solar_panels_make,
+            STRING_AGG(DISTINCT b.solar_inverter_make, ', ') AS solar_inverter_make,
+            MIN(b.net_meter_commissioning_date::TEXT) AS net_meter_commissioning_date,
+            COUNT(DISTINCT b.id) AS total_buildings,
+            SUM(b.total_apartments::NUMERIC) AS total_apartments
+        FROM
+            projects p
+        JOIN
+            buildings b ON p.id = b.project_id
+        GROUP BY
+            p.id
+    ),
+    grid_power_usage AS (
+        SELECT
+            cd.project_id,
+            SUM(latest_readings.source1_kwh::NUMERIC - first_readings.source1_kwh::NUMERIC) as total_grid_power_used
+        FROM
+            central_devices cd
+        JOIN
+            spdus s ON cd.id = s.central_device_id
+        JOIN (
+            SELECT DISTINCT ON (spdu_id)
+                spdu_id, source1_kwh
+            FROM spdu_readings
+            ORDER BY spdu_id, timestamp DESC
+        ) latest_readings ON s.spdu_id = latest_readings.spdu_id
+        JOIN (
+            SELECT DISTINCT ON (spdu_id)
+                spdu_id, source1_kwh
+            FROM spdu_readings
+            ORDER BY spdu_id, timestamp ASC
+        ) first_readings ON s.spdu_id = first_readings.spdu_id
+        GROUP BY
+            cd.project_id
+    ),
+    solar_meter_data AS (
+        SELECT 
+            b.project_id,
+            SUM(bmr_max.reading::NUMERIC - bmr_min.reading::NUMERIC) AS total_generation,
+            MIN(bmr_min.min_timestamp) AS first_reading_date,
+            MAX(bmr_max.max_timestamp) AS last_reading_date
+        FROM buildings b
+        JOIN building_meters bm ON b.id = bm.building_id
+        JOIN (
+            SELECT building_meter_id, MIN(reading) AS reading, MIN(timestamp) AS min_timestamp
+            FROM building_meter_readings
+            GROUP BY building_meter_id
+        ) bmr_min ON bm.id = bmr_min.building_meter_id
+        JOIN (
+            SELECT building_meter_id, MAX(reading) AS reading, MAX(timestamp) AS max_timestamp
+            FROM building_meter_readings
+            GROUP BY building_meter_id
+        ) bmr_max ON bm.id = bmr_max.building_meter_id
+        WHERE bm.meter_type = 'solar_generation'
+        GROUP BY b.project_id
+    ),
+    project_solar_health AS (
+        SELECT 
+            p.id AS project_id,
+            COALESCE(smd.total_generation, 0) AS total_solar_generation,
+            COALESCE(EXTRACT(DAY FROM (smd.last_reading_date - smd.first_reading_date)), 0) AS total_days,
+            CASE 
+                WHEN COALESCE(EXTRACT(DAY FROM (smd.last_reading_date - smd.first_reading_date)), 0) > 0 AND pd.total_solar_capacity > 0 
+                THEN (COALESCE(smd.total_generation, 0) / EXTRACT(DAY FROM (smd.last_reading_date - smd.first_reading_date))) / pd.total_solar_capacity
+                ELSE 0 
+            END AS health_ratio
+        FROM projects p
+        LEFT JOIN project_details pd ON p.id = pd.project_id
+        LEFT JOIN solar_meter_data smd ON p.id = smd.project_id
+    ),
+    building_last_data AS (
+        SELECT 
+            b.project_id,
+            jsonb_agg(
+                jsonb_build_object(
+                    'building_name', b.name,
+                    'last_data_packet', (
+                        SELECT MAX(bmr.timestamp)
+                        FROM building_meter_readings bmr
+                        JOIN building_meters bm ON bmr.building_meter_id = bm.id
+                        WHERE bm.building_id = b.id
+                    )
+                )
+            ) AS building_data
+        FROM buildings b
+        GROUP BY b.project_id
+    )
+    SELECT 
+        p.id,
+        p.name,
+        p.location,
+        p.city,
+        p.latitude::NUMERIC,
+        p.longitude::NUMERIC,
+        COUNT(DISTINCT cd.id)::BIGINT AS total_central_devices,
+        COUNT(DISTINCT CASE WHEN cd.status = 'active' THEN cd.id END)::BIGINT AS active_central_devices,
+        COUNT(DISTINCT s.id)::BIGINT AS total_spdus,
+        COUNT(DISTINCT CASE WHEN s.status = 'active' THEN s.id END)::BIGINT AS active_spdus,
+        COALESCE(MAX(sr.timestamp), NULL) AS last_data_packet,
+        p.image_url,  -- Directly use p.image_url instead of any derived value
+        COALESCE(ped.total_solar_generated, 0) /1000 AS solar_generated,
+        COALESCE(ped.total_common_utilities, 0) /1000 AS common_utilities,
+        COALESCE(sc.total_solar_distributed, 0) /1000 AS solar_distributed,
+        COALESCE(pd.total_solar_capacity, 0) AS total_solar_capacity,
+        COALESCE(pd.total_net_meter_capacity, 0) AS total_net_meter_capacity,
+        COALESCE(pd.solar_panels_make, '') AS solar_panels_make,
+        COALESCE(pd.solar_inverter_make, '') AS solar_inverter_make,
+        COALESCE(pd.net_meter_commissioning_date, '') AS net_meter_commissioning_date,
+        COALESCE(pd.total_buildings, 0)::BIGINT AS total_buildings,
+        COALESCE(pd.total_apartments, 0)::NUMERIC AS total_apartments,
+        COALESCE(gpu.total_grid_power_used, 0) /1000 AS grid_power_used,
+        (SELECT MIN(timestamp) FROM spdu_readings) AS first_data_recording_date,
+        COALESCE(psh.health_ratio, 0) AS solar_system_health_ratio,
+        COALESCE(bld.building_data, '[]'::jsonb) AS building_last_data_packets,
+        p.status
+    FROM 
+        projects p
+        LEFT JOIN central_devices cd ON p.id = cd.project_id
+        LEFT JOIN spdus s ON cd.id = s.central_device_id
+        LEFT JOIN (
+            SELECT DISTINCT ON (spdu_id) spdu_id, timestamp
+            FROM spdu_readings
+            WHERE timestamp <= CURRENT_TIMESTAMP
+            ORDER BY spdu_id, timestamp DESC
+        ) sr ON s.spdu_id = sr.spdu_id
+        LEFT JOIN project_energy_data ped ON p.id = ped.project_id
+        LEFT JOIN spdu_consumption sc ON p.id = sc.project_id
+        LEFT JOIN project_details pd ON p.id = pd.project_id
+        LEFT JOIN grid_power_usage gpu ON p.id = gpu.project_id
+        LEFT JOIN project_solar_health psh ON p.id = psh.project_id
+        LEFT JOIN building_last_data bld ON p.id = bld.project_id
+    GROUP BY 
+        p.id, p.name, p.location, p.city, p.latitude, p.longitude, p.image_url, p.status,
+        ped.total_solar_generated, ped.total_common_utilities, sc.total_solar_distributed,
+        pd.total_solar_capacity, pd.total_net_meter_capacity, pd.solar_panels_make,
+        pd.solar_inverter_make, pd.net_meter_commissioning_date, pd.total_buildings, pd.total_apartments,
+        gpu.total_grid_power_used, psh.health_ratio, bld.building_data;
+END;
+$$ LANGUAGE plpgsql;

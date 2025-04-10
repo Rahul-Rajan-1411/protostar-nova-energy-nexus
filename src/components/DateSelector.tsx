@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import {
   Select,
@@ -182,13 +181,12 @@ const DateSelector = ({ onDateRangeChange }: DateSelectorProps) => {
                     placeholder="DD/MM/YY"
                     value={startDateText}
                     onChange={handleStartDateTextChange}
-                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    className="w-full bg-transparent border-none focus:ring-0 p-0"
                     onClick={(e) => {
                       e.stopPropagation();
                       setIsStartDateOpen(true);
                     }}
                   />
-                  {startDateText || "Start date"}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
@@ -214,13 +212,12 @@ const DateSelector = ({ onDateRangeChange }: DateSelectorProps) => {
                     placeholder="DD/MM/YY"
                     value={endDateText}
                     onChange={handleEndDateTextChange}
-                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    className="w-full bg-transparent border-none focus:ring-0 p-0"
                     onClick={(e) => {
                       e.stopPropagation();
                       setIsEndDateOpen(true);
                     }}
                   />
-                  {endDateText || "End date"}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">

@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/use-toast';
@@ -77,6 +76,11 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
         
         // Call Supabase to get energy data using the stored function with properly formatted date range
         console.log('Fetching usage details...');
+        console.log('RPC Parameters:', {
+          p_date_range: formattedDateRange,
+          p_start_date: formattedStartDate,
+          p_end_date: formattedEndDate
+        });
         const { data, error } = await supabase.rpc('get_energy_data', {
           p_date_range: formattedDateRange,
           p_start_date: formattedStartDate,
@@ -89,20 +93,23 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
         }
         
         if (data) {
-          console.log('Energy data from RPC:', data);
+          console.log('Raw Energy data from RPC:', JSON.stringify(data, null, 2));
           
           // Cast the data to the expected type with double casting for type safety
           const typedData = data as unknown as EnergyData;
+          console.log('Typed Energy data:', JSON.stringify(typedData, null, 2));
           
           // Set the usage data from the response with safe property access
-          setUsageData({
+          const newUsageData = {
             solarGenerated: Number(typedData.generated || 0),
             solarConsumed: Number(typedData.consumed || 0),
             solarDistributed: Number(typedData.distributed || 0),
             solarCommonUtilities: Number(typedData.commonUtilities || 0),
             solarUnused: Number(typedData.unused || 0),
             gridConsumed: Number(typedData.gridConsumed || 0)
-          });
+          };
+          console.log('Processed Usage Data:', JSON.stringify(newUsageData, null, 2));
+          setUsageData(newUsageData);
         }
       } catch (error) {
         console.error('Error fetching usage details:', error);
@@ -135,6 +142,7 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
         const dayEnd = new Date(dayDate);
         dayEnd.setHours(23, 59, 59, 999);
         
+        // Convert to UTC ISO string
         formattedStartDate = dayStart.toISOString();
         formattedEndDate = dayEnd.toISOString();
         break;
@@ -144,6 +152,7 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
         const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
         const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
         
+        // Convert to UTC ISO string
         formattedStartDate = monthStart.toISOString();
         formattedEndDate = monthEnd.toISOString();
         break;

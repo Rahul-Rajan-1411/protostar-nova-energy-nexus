@@ -1,0 +1,169 @@
+CREATE OR REPLACE FUNCTION get_energy_data(p_date_range TEXT, p_start_date TEXT DEFAULT NULL, p_end_date TEXT DEFAULT NULL)
+RETURNS JSON AS $$
+DECLARE
+    result JSON;
+    start_date TIMESTAMP; -- Changed from TIMESTAMP WITH TIME ZONE
+    end_date TIMESTAMP;  -- Changed from TIMESTAMP WITH TIME ZONE
+    parsed_start_date TIMESTAMP; -- Changed from TIMESTAMP WITH TIME ZONE
+    parsed_end_date TIMESTAMP;  -- Changed from TIMESTAMP WITH TIME ZONE
+    spdu_reading_count INTEGER;
+    first_reading_date TIMESTAMP;
+    last_reading_date TIMESTAMP;
+BEGIN
+    -- Parse and validate input dates
+    BEGIN
+        IF p_start_date IS NOT NULL THEN
+            parsed_start_date := p_start_date::TIMESTAMP; -- Removed timezone conversion
+        END IF;
+        
+        IF p_end_date IS NOT NULL THEN
+            parsed_end_date := p_end_date::TIMESTAMP; -- Removed timezone conversion
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+        -- If parsing fails, return an error
+        RETURN json_build_object(
+            'error', 'Date parsing error',
+            'input_dates', json_build_object('p_start_date', p_start_date, 'p_end_date', p_end_date),
+            'message', SQLERRM
+        );
+    END;
+
+    -- Get the first and last reading dates
+    SELECT MIN(timestamp), MAX(timestamp)
+    INTO first_reading_date, last_reading_date
+    FROM spdu_readings;
+
+    -- Set the date range based on the input parameters
+    CASE p_date_range
+        WHEN 'Day' THEN
+            -- Use the provided dates directly
+            start_date := parsed_start_date;
+            end_date := parsed_end_date;
+        WHEN 'Week' THEN
+            start_date := date_trunc('week', parsed_start_date);
+            end_date := date_trunc('week', parsed_end_date) + INTERVAL '1 week' - INTERVAL '1 second';
+        WHEN 'Month' THEN
+            start_date := date_trunc('month', parsed_start_date);
+            end_date := date_trunc('month', parsed_end_date) + INTERVAL '1 month' - INTERVAL '1 second';
+        WHEN 'Quarter' THEN
+            start_date := date_trunc('quarter', parsed_start_date);
+            end_date := date_trunc('quarter', parsed_end_date) + INTERVAL '3 months' - INTERVAL '1 second';
+        WHEN 'Year' THEN
+            start_date := date_trunc('year', parsed_start_date);
+            end_date := date_trunc('year', parsed_end_date) + INTERVAL '1 year' - INTERVAL '1 second';
+        WHEN 'Lifetime' THEN
+            start_date := first_reading_date;
+            end_date := last_reading_date;
+        WHEN 'Custom' THEN 
+            -- Make sure we have valid dates for custom range
+            IF parsed_start_date IS NULL OR parsed_end_date IS NULL THEN
+                RETURN json_build_object(
+                    'error', 'Invalid custom date range',
+                    'input_dates', json_build_object('p_start_date', p_start_date, 'p_end_date', p_end_date)
+                );
+            END IF;
+            
+            start_date := parsed_start_date;
+            end_date := parsed_end_date;
+        ELSE 
+            RAISE EXCEPTION 'Invalid date range: %', p_date_range;
+    END CASE;
+
+    -- Count the number of readings
+    SELECT COUNT(*) INTO spdu_reading_count
+    FROM spdu_readings
+    WHERE timestamp >= start_date AND timestamp <= end_date;
+
+    -- Calculate energy data
+    WITH spdu_consumption AS (
+        SELECT 
+            CASE 
+                WHEN p_date_range = 'Lifetime' THEN
+                    COALESCE(SUM(end_reading.source1_kwh::NUMERIC), 0) / 1000
+                ELSE
+                    COALESCE(SUM(end_reading.source1_kwh::NUMERIC - start_reading.source1_kwh::NUMERIC), 0) / 1000
+            END AS total_grid,
+            CASE 
+                WHEN p_date_range = 'Lifetime' THEN
+                    COALESCE(SUM(end_reading.source2_kwh::NUMERIC), 0) / 1000
+                ELSE
+                    COALESCE(SUM(end_reading.source2_kwh::NUMERIC - start_reading.source2_kwh::NUMERIC), 0) / 1000
+            END AS total_solar_consumed
+        FROM 
+            spdu_readings start_reading
+            JOIN spdu_readings end_reading ON start_reading.spdu_id = end_reading.spdu_id
+        WHERE 
+            start_reading.timestamp = (
+                SELECT MIN(timestamp) 
+                FROM spdu_readings 
+                WHERE timestamp >= start_date
+            )
+            AND end_reading.timestamp = (
+                SELECT MAX(timestamp) 
+                FROM spdu_readings 
+                WHERE timestamp <= end_date
+            )
+    ),
+    meter_readings AS (
+        SELECT
+            CASE 
+                WHEN p_date_range = 'Lifetime' THEN
+                    COALESCE(SUM(solar_end.reading::NUMERIC), 0) / 1000
+                ELSE
+                    COALESCE(SUM(solar_end.reading::NUMERIC - solar_start.reading::NUMERIC), 0) / 1000
+            END AS total_generated,
+            CASE 
+                WHEN p_date_range = 'Lifetime' THEN
+                    COALESCE(SUM(common_end.reading::NUMERIC), 0) / 1000
+                ELSE
+                    COALESCE(SUM(common_end.reading::NUMERIC - common_start.reading::NUMERIC), 0) / 1000
+            END AS total_common_utilities
+        FROM
+            building_meter_readings solar_start
+            JOIN building_meter_readings solar_end ON solar_start.building_meter_id = solar_end.building_meter_id
+            JOIN building_meter_readings common_start ON common_start.building_meter_id = solar_start.building_meter_id + 1
+            JOIN building_meter_readings common_end ON common_end.building_meter_id = solar_end.building_meter_id + 1
+        WHERE
+            solar_start.building_meter_id % 2 = 1  -- Odd numbers are solar meters
+            AND solar_start.timestamp = (
+                SELECT MIN(timestamp) 
+                FROM building_meter_readings 
+                WHERE timestamp >= start_date AND building_meter_id % 2 = 1
+            )
+            AND solar_end.timestamp = (
+                SELECT MAX(timestamp) 
+                FROM building_meter_readings 
+                WHERE timestamp <= end_date AND building_meter_id % 2 = 1
+            )
+            AND common_start.timestamp = (
+                SELECT MIN(timestamp) 
+                FROM building_meter_readings 
+                WHERE timestamp >= start_date AND building_meter_id % 2 = 0
+            )
+            AND common_end.timestamp = (
+                SELECT MAX(timestamp) 
+                FROM building_meter_readings 
+                WHERE timestamp <= end_date AND building_meter_id % 2 = 0
+            )
+    )
+    SELECT json_build_object(
+        'generated', ROUND((SELECT total_generated FROM meter_readings)::NUMERIC, 2),
+        'consumed', ROUND(((SELECT total_solar_consumed FROM spdu_consumption) + (SELECT total_common_utilities FROM meter_readings))::NUMERIC, 2),
+        'distributed', ROUND((SELECT total_solar_consumed FROM spdu_consumption)::NUMERIC, 2),
+        'commonUtilities', ROUND((SELECT total_common_utilities FROM meter_readings)::NUMERIC, 2),
+        'unused', ROUND(GREATEST(((SELECT total_generated FROM meter_readings) - (SELECT total_solar_consumed FROM spdu_consumption) - (SELECT total_common_utilities FROM meter_readings)), 0)::NUMERIC, 2),
+        'gridConsumed', ROUND((SELECT total_grid FROM spdu_consumption)::NUMERIC, 2),
+        'is_test_data', TRUE,
+        'debug_info', json_build_object(
+            'date_range_type', p_date_range,
+            'input_dates', json_build_object('p_start_date', p_start_date, 'p_end_date', p_end_date),
+            'parsed_dates', json_build_object('parsed_start_date', parsed_start_date, 'parsed_end_date', parsed_end_date),
+            'calculated_range', json_build_object('start_date', start_date, 'end_date', end_date),
+            'reading_dates', json_build_object('first_reading_date', first_reading_date, 'last_reading_date', last_reading_date),
+            'spdu_reading_count', spdu_reading_count
+        )
+    ) INTO result;
+
+    RETURN result;
+END;
+$$ LANGUAGE plpgsql;

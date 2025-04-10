@@ -36,6 +36,7 @@ interface EnergyData {
   commonUtilities: number;
   unused: number;
   gridConsumed: number;
+  [key: string]: any;
 }
 
 interface ProjectStats {
@@ -135,9 +136,9 @@ export const useStatsData = (
         
         if (projectStatsError) throw projectStatsError;
         
-        // Fetch energy data using RPC
+        // Fetch energy data using RPC with lowercase date range
         const { data: energyData, error: energyError } = await supabase.rpc('get_energy_data', {
-          p_date_range: dateRange,
+          p_date_range: dateRange.toLowerCase(), // Make sure dateRange is lowercase
           p_start_date: formattedStartDate,
           p_end_date: formattedEndDate
         }) as { data: EnergyData | null, error: any };
@@ -160,10 +161,10 @@ export const useStatsData = (
         const solar = isDateInFuture ? 
           { total: 0, consumed: 0, unused: 0, grid: 0 } : 
           {
-            total: Number(energyData?.generated) || 0,
-            consumed: Number(energyData?.consumed) || 0,
-            unused: Number(energyData?.unused) || 0,
-            grid: Number(energyData?.gridConsumed) || 0
+            total: Number(energyData?.generated || 0),
+            consumed: Number(energyData?.consumed || 0),
+            unused: Number(energyData?.unused || 0),
+            grid: Number(energyData?.gridConsumed || 0)
           };
 
         return {
@@ -179,7 +180,12 @@ export const useStatsData = (
           description: 'Failed to load dashboard statistics',
           variant: 'destructive',
         });
-        return null;
+        return {
+          projects: { total: 0, active: 0, inactive: 0 },
+          spdus: { total: 0, active: 0, inactive: 0 },
+          centralDevices: { total: 0, active: 0, inactive: 0 },
+          solar: { total: 0, consumed: 0, unused: 0, grid: 0 }
+        };
       }
     }
   });

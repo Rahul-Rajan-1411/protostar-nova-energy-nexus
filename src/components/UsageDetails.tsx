@@ -69,9 +69,9 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
         // Format date range for query
         const { formattedStartDate, formattedEndDate } = formatDateRange(dateRange, startDate, endDate, selectedMonth);
         
-        // Call Supabase to get energy data using the stored function
+        // Call Supabase to get energy data using the stored function with lowercase date range
         const { data, error } = await supabase.rpc('get_energy_data', {
-          p_date_range: dateRange,
+          p_date_range: dateRange.toLowerCase(), // Make sure dateRange is lowercase
           p_start_date: formattedStartDate,
           p_end_date: formattedEndDate
         }) as { data: EnergyData | null, error: any };
@@ -83,12 +83,12 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
           
           // Set the usage data from the response
           setUsageData({
-            solarGenerated: Number(data.generated) || 0,
-            solarConsumed: Number(data.consumed) || 0,
-            solarDistributed: Number(data.distributed) || 0,
-            solarCommonUtilities: Number(data.commonUtilities) || 0,
-            solarUnused: Number(data.unused) || 0,
-            gridConsumed: Number(data.gridConsumed) || 0
+            solarGenerated: Number(data.generated || 0),
+            solarConsumed: Number(data.consumed || 0),
+            solarDistributed: Number(data.distributed || 0),
+            solarCommonUtilities: Number(data.commonUtilities || 0),
+            solarUnused: Number(data.unused || 0),
+            gridConsumed: Number(data.gridConsumed || 0)
           });
         }
       } catch (error) {

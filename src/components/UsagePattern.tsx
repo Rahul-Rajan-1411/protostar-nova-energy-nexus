@@ -39,9 +39,9 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
         // Format date range
         const { formattedStartDate, formattedEndDate } = formatDateRange(dateRange, startDate, endDate, selectedMonth);
         
-        // Call Supabase to get energy data using the stored function
+        // Call Supabase to get energy data using the stored function with lowercase date range
         const { data, error } = await supabase.rpc('get_energy_data', {
-          p_date_range: dateRange,
+          p_date_range: dateRange.toLowerCase(), // Make sure dateRange is lowercase
           p_start_date: formattedStartDate,
           p_end_date: formattedEndDate
         }) as { data: EnergyData | null, error: any };

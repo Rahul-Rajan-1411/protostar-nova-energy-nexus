@@ -72,15 +72,21 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
         // Convert dateRange to uppercase first letter format as required by the Supabase function
         const formattedDateRange = dateRange.charAt(0).toUpperCase() + dateRange.slice(1);
         console.log('Usage Details using date range format:', formattedDateRange);
+        console.log('Start date:', formattedStartDate);
+        console.log('End date:', formattedEndDate);
         
         // Call Supabase to get energy data using the stored function with properly formatted date range
+        console.log('Fetching usage details...');
         const { data, error } = await supabase.rpc('get_energy_data', {
           p_date_range: formattedDateRange,
           p_start_date: formattedStartDate,
           p_end_date: formattedEndDate
-        }) as { data: EnergyData | null, error: any };
+        });
         
-        if (error) throw error;
+        if (error) {
+          console.error('Error fetching usage details:', error);
+          throw error;
+        }
         
         if (data) {
           console.log('Energy data from RPC:', data);

@@ -132,26 +132,37 @@ export const useStatsData = (
         const { formattedStartDate, formattedEndDate } = formatDateRange(dateRange, startDate, endDate, selectedMonth);
         
         // Fetch project stats using RPC
-        const { data: projectStatsData, error: projectStatsError } = await supabase.rpc('get_project_stats') as { data: ProjectStats | null, error: any };
+        console.log('Fetching project stats...');
+        const { data: projectStatsData, error: projectStatsError } = await supabase.rpc('get_project_stats');
         
-        if (projectStatsError) throw projectStatsError;
+        if (projectStatsError) {
+          console.error('Error fetching project stats:', projectStatsError);
+          throw projectStatsError;
+        }
         
-        // Convert dateRange to uppercase first letter format as required by the Supabase function
-        // The SQL function expects 'Day', 'Month', 'Custom', 'Lifetime' formats
+        console.log('Project stats data:', projectStatsData);
+        
+        // Convert dateRange to required format for the Supabase function
+        // Function expects 'Day', 'Month', 'Custom', 'Lifetime' formats
         const formattedDateRange = dateRange.charAt(0).toUpperCase() + dateRange.slice(1);
         console.log('Using date range format:', formattedDateRange);
+        console.log('Start date:', formattedStartDate);
+        console.log('End date:', formattedEndDate);
         
         // Fetch energy data using RPC with properly formatted date range
+        console.log('Fetching energy data...');
         const { data: energyData, error: energyError } = await supabase.rpc('get_energy_data', {
-          p_date_range: formattedDateRange, // Format to match what the SQL function expects
+          p_date_range: formattedDateRange,
           p_start_date: formattedStartDate,
           p_end_date: formattedEndDate
-        }) as { data: EnergyData | null, error: any };
+        });
         
-        if (energyError) throw energyError;
+        if (energyError) {
+          console.error('Error fetching energy data:', energyError);
+          throw energyError;
+        }
         
-        console.log('Project stats:', projectStatsData);
-        console.log('Energy data:', energyData);
+        console.log('Energy data from RPC:', energyData);
         
         // Organize the data
         const projects = projectStatsData?.projects || { total: 0, active: 0, inactive: 0 };
@@ -172,12 +183,15 @@ export const useStatsData = (
             grid: Number(energyData?.gridConsumed || 0)
           };
 
-        return {
+        const result = {
           projects,
           spdus,
           centralDevices,
           solar
         };
+        
+        console.log('Final stats result:', result);
+        return result;
       } catch (error) {
         console.error('Error fetching stats:', error);
         toast({

@@ -467,7 +467,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_energy_data: {
+        Args: {
+          p_date_range: string
+          p_start_date?: string
+          p_end_date?: string
+        }
+        Returns: Json
+      }
+      get_project_stats: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
     }
     Enums: {
       app_role: "super_admin" | "admin" | "client_admin" | "client"

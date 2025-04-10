@@ -33,67 +33,27 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
         // Format date range
         const { formattedStartDate, formattedEndDate } = formatDateRange(dateRange, startDate, endDate, selectedMonth);
         
-        // Get SPDU readings for the period
-        const startQuery = supabase
-          .from('spdu_readings')
-          .select('spdu_id, source1_kwh, source2_kwh, timestamp')
-          .gte('timestamp', formattedStartDate)
-          .order('timestamp', { ascending: true });
+        // Call Supabase to get energy data using the stored function
+        const { data, error } = await supabase.rpc('get_energy_data', {
+          p_date_range: dateRange,
+          p_start_date: formattedStartDate,
+          p_end_date: formattedEndDate
+        });
+        
+        if (error) throw error;
+        
+        if (data) {
+          console.log('Energy data from RPC:', data);
           
-        const endQuery = supabase
-          .from('spdu_readings')
-          .select('spdu_id, source1_kwh, source2_kwh, timestamp')
-          .lte('timestamp', formattedEndDate)
-          .order('timestamp', { ascending: false });
-        
-        const [startResponse, endResponse] = await Promise.all([startQuery, endQuery]);
-        
-        if (startResponse.error) throw startResponse.error;
-        if (endResponse.error) throw endResponse.error;
-        
-        const startReadings = startResponse.data || [];
-        const endReadings = endResponse.data || [];
-        
-        // Calculate solar and grid consumption
-        let solarValue = 0;
-        let gridValue = 0;
-        
-        if (startReadings.length > 0 && endReadings.length > 0) {
-          // Group readings by SPDU ID
-          const startReadingBySpduId = groupBy(startReadings, 'spdu_id');
-          const endReadingBySpduId = groupBy(endReadings, 'spdu_id');
+          // Update chart data
+          const solarValue = Number(data.distributed) || 0;
+          const gridValue = Number(data.gridConsumed) || 0;
           
-          // Get unique SPDU IDs
-          const spduIds = [...new Set([
-            ...Object.keys(startReadingBySpduId),
-            ...Object.keys(endReadingBySpduId)
-          ])];
-          
-          // Calculate difference for each SPDU
-          spduIds.forEach(spduId => {
-            const start = startReadingBySpduId[spduId]?.[0];
-            const end = endReadingBySpduId[spduId]?.[0];
-            
-            if (start && end) {
-              solarValue += (Number(end.source2_kwh) - Number(start.source2_kwh));
-              gridValue += (Number(end.source1_kwh) - Number(start.source1_kwh));
-            } else if (end && !start) {
-              // If we only have end readings, just use those (lifetime case)
-              solarValue += Number(end.source2_kwh);
-              gridValue += Number(end.source1_kwh);
-            }
-          });
-        } else if (endReadings.length > 0) {
-          // If we only have end readings (for lifetime view), sum them up
-          solarValue = endReadings.reduce((sum, item) => sum + Number(item.source2_kwh || 0), 0);
-          gridValue = endReadings.reduce((sum, item) => sum + Number(item.source1_kwh || 0), 0);
+          setChartData([
+            { name: 'Solar', value: solarValue, color: '#27ae60' },
+            { name: 'Grid', value: gridValue, color: '#e74c3c' },
+          ]);
         }
-        
-        // Update chart data
-        setChartData([
-          { name: 'Solar', value: parseFloat(solarValue.toFixed(2)), color: '#27ae60' },
-          { name: 'Grid', value: parseFloat(gridValue.toFixed(2)), color: '#e74c3c' },
-        ]);
       } catch (error) {
         console.error('Error fetching usage data:', error);
         toast({
@@ -115,7 +75,7 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
     let formattedEndDate: string;
 
     // Default date during development
-    const developmentDate = new Date(2023, 2, 31); // March 31, 2023
+    const developmentDate = new Date(2024, 2, 31); // March 31, 2024
 
     switch (dateRange) {
       case 'day':
@@ -130,7 +90,7 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
         break;
         
       case 'month':
-        const monthDate = selectedMonth || new Date(2023, 2, 1); // March 2023
+        const monthDate = selectedMonth || new Date(2024, 2, 1); // March 2024
         const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
         const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
         
@@ -144,7 +104,7 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
           customStart.setHours(0, 0, 0, 0);
           formattedStartDate = customStart.toISOString();
         } else {
-          formattedStartDate = new Date(2023, 0, 1).toISOString(); // Default to Jan 1, 2023
+          formattedStartDate = new Date(2024, 0, 1).toISOString(); // Default to Jan 1, 2024
         }
         
         if (endDate) {
@@ -152,7 +112,7 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
           customEnd.setHours(23, 59, 59, 999);
           formattedEndDate = customEnd.toISOString();
         } else {
-          formattedEndDate = new Date(2023, 11, 31, 23, 59, 59, 999).toISOString(); // Default to Dec 31, 2023
+          formattedEndDate = new Date(2024, 11, 31, 23, 59, 59, 999).toISOString(); // Default to Dec 31, 2024
         }
         break;
         
@@ -165,16 +125,6 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
     }
     
     return { formattedStartDate, formattedEndDate };
-  };
-
-  // Helper function to group array by key
-  const groupBy = <T extends Record<string, any>>(array: T[], key: keyof T): Record<string, T[]> => {
-    return array.reduce((result, item) => {
-      const groupKey = String(item[key]);
-      result[groupKey] = result[groupKey] || [];
-      result[groupKey].push(item);
-      return result;
-    }, {} as Record<string, T[]>);
   };
 
   // Custom tooltip

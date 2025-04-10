@@ -8,13 +8,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
-import { format, addMonths, subMonths } from "date-fns";
+import { format, addMonths, subMonths, parse } from "date-fns";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 
 export type DateRangeType = 'day' | 'month' | 'custom' | 'lifetime';
@@ -29,14 +30,26 @@ const DateSelector = ({ onDateRangeChange }: DateSelectorProps) => {
   const [endDate, setEndDate] = useState<Date | undefined>(undefined);
   const [isStartDateOpen, setIsStartDateOpen] = useState(false);
   const [isEndDateOpen, setIsEndDateOpen] = useState(false);
-  // Use March 31, 2023 as the default "present day" during development
-  const [currentDate] = useState<Date>(new Date(2023, 2, 31)); // March 31, 2023
-  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date(2023, 2, 1)); // March 2023
+  const [startDateText, setStartDateText] = useState<string>('');
+  const [endDateText, setEndDateText] = useState<string>('');
+  // Use March 31, 2024 as the default "present day" during development
+  const [currentDate] = useState<Date>(new Date(2024, 2, 31)); // March 31, 2024
+  const [selectedMonth, setSelectedMonth] = useState<Date>(new Date(2024, 2, 1)); // March 2024
 
   useEffect(() => {
     // Initial data load with default date range (day)
     handleRangeChange('day');
   }, []);
+
+  useEffect(() => {
+    // Update text when dates change
+    if (startDate) {
+      setStartDateText(format(startDate, 'dd/MM/yy'));
+    }
+    if (endDate) {
+      setEndDateText(format(endDate, 'dd/MM/yy'));
+    }
+  }, [startDate, endDate]);
 
   const handleRangeChange = (value: string) => {
     const rangeType = value as DateRangeType;
@@ -46,9 +59,11 @@ const DateSelector = ({ onDateRangeChange }: DateSelectorProps) => {
     if (rangeType !== 'custom') {
       setStartDate(undefined);
       setEndDate(undefined);
+      setStartDateText('');
+      setEndDateText('');
       
       if (rangeType === 'day') {
-        // Use March 31, 2023 as the "present day" during development
+        // Use March 31, 2024 as the "present day" during development
         onDateRangeChange(rangeType, currentDate, undefined);
       } else if (rangeType === 'month') {
         onDateRangeChange(rangeType, undefined, undefined, selectedMonth);
@@ -62,8 +77,12 @@ const DateSelector = ({ onDateRangeChange }: DateSelectorProps) => {
     setStartDate(date);
     setIsStartDateOpen(false);
     
-    if (date && endDate && selectedRange === 'custom') {
-      onDateRangeChange('custom', date, endDate);
+    if (date) {
+      setStartDateText(format(date, 'dd/MM/yy'));
+      
+      if (endDate && selectedRange === 'custom') {
+        onDateRangeChange('custom', date, endDate);
+      }
     }
   };
 
@@ -71,8 +90,54 @@ const DateSelector = ({ onDateRangeChange }: DateSelectorProps) => {
     setEndDate(date);
     setIsEndDateOpen(false);
     
-    if (startDate && date && selectedRange === 'custom') {
-      onDateRangeChange('custom', startDate, date);
+    if (date) {
+      setEndDateText(format(date, 'dd/MM/yy'));
+      
+      if (startDate && selectedRange === 'custom') {
+        onDateRangeChange('custom', startDate, date);
+      }
+    }
+  };
+
+  const handleStartDateTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setStartDateText(e.target.value);
+    
+    if (e.target.value.length === 8) { // Format: DD/MM/YY
+      try {
+        // Parse the date from the input
+        const parsedDate = parse(e.target.value, 'dd/MM/yy', new Date());
+        
+        if (!isNaN(parsedDate.getTime())) {
+          setStartDate(parsedDate);
+          
+          if (endDate && selectedRange === 'custom') {
+            onDateRangeChange('custom', parsedDate, endDate);
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing date:', error);
+      }
+    }
+  };
+
+  const handleEndDateTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEndDateText(e.target.value);
+    
+    if (e.target.value.length === 8) { // Format: DD/MM/YY
+      try {
+        // Parse the date from the input
+        const parsedDate = parse(e.target.value, 'dd/MM/yy', new Date());
+        
+        if (!isNaN(parsedDate.getTime())) {
+          setEndDate(parsedDate);
+          
+          if (startDate && selectedRange === 'custom') {
+            onDateRangeChange('custom', startDate, parsedDate);
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing date:', error);
+      }
     }
   };
 
@@ -109,10 +174,21 @@ const DateSelector = ({ onDateRangeChange }: DateSelectorProps) => {
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
-                  className="w-[160px] justify-start text-left font-normal"
+                  className="w-[160px] justify-start text-left font-normal relative"
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {startDate ? format(startDate, "PPP") : "Start date"}
+                  <Input
+                    type="text"
+                    placeholder="DD/MM/YY"
+                    value={startDateText}
+                    onChange={handleStartDateTextChange}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsStartDateOpen(true);
+                    }}
+                  />
+                  {startDateText || "Start date"}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">
@@ -130,10 +206,21 @@ const DateSelector = ({ onDateRangeChange }: DateSelectorProps) => {
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
-                  className="w-[160px] justify-start text-left font-normal"
+                  className="w-[160px] justify-start text-left font-normal relative"
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {endDate ? format(endDate, "PPP") : "End date"}
+                  <Input
+                    type="text"
+                    placeholder="DD/MM/YY"
+                    value={endDateText}
+                    onChange={handleEndDateTextChange}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsEndDateOpen(true);
+                    }}
+                  />
+                  {endDateText || "End date"}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">

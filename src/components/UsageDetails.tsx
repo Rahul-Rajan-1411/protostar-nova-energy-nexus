@@ -56,183 +56,31 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
       try {
         setLoading(true);
         
-        // Format date range for queries
+        // Format date range for query
         const { formattedStartDate, formattedEndDate } = formatDateRange(dateRange, startDate, endDate, selectedMonth);
         
-        // 1. First, get the solar generation meter IDs
-        const { data: solarMeters, error: metersError } = await supabase
-          .from('building_meters')
-          .select('id, meter_type');
-        
-        if (metersError) throw metersError;
-        
-        // Filter meter IDs by type
-        const solarMeterIds = solarMeters?.filter(meter => meter.meter_type === 'solar_generation').map(meter => meter.id) || [];
-        const commonMeterIds = solarMeters?.filter(meter => meter.meter_type === 'common_utilities').map(meter => meter.id) || [];
-        
-        // 2. Get earliest and latest readings for solar generation
-        const solarStartQuery = supabase
-          .from('building_meter_readings')
-          .select('building_meter_id, reading, timestamp')
-          .in('building_meter_id', solarMeterIds)
-          .gte('timestamp', formattedStartDate)
-          .order('timestamp', { ascending: true });
-          
-        const solarEndQuery = supabase
-          .from('building_meter_readings')
-          .select('building_meter_id, reading, timestamp')
-          .in('building_meter_id', solarMeterIds)
-          .lte('timestamp', formattedEndDate)
-          .order('timestamp', { ascending: false });
-          
-        // 3. Get earliest and latest readings for common utilities
-        const commonStartQuery = supabase
-          .from('building_meter_readings')
-          .select('building_meter_id, reading, timestamp')
-          .in('building_meter_id', commonMeterIds)
-          .gte('timestamp', formattedStartDate)
-          .order('timestamp', { ascending: true });
-          
-        const commonEndQuery = supabase
-          .from('building_meter_readings')
-          .select('building_meter_id, reading, timestamp')
-          .in('building_meter_id', commonMeterIds)
-          .lte('timestamp', formattedEndDate)
-          .order('timestamp', { ascending: false });
-          
-        // 4. Get SPDU readings for the same period
-        const spduStartQuery = supabase
-          .from('spdu_readings')
-          .select('spdu_id, source1_kwh, source2_kwh, timestamp')
-          .gte('timestamp', formattedStartDate)
-          .order('timestamp', { ascending: true });
-          
-        const spduEndQuery = supabase
-          .from('spdu_readings')
-          .select('spdu_id, source1_kwh, source2_kwh, timestamp')
-          .lte('timestamp', formattedEndDate)
-          .order('timestamp', { ascending: false });
-        
-        // Execute all queries in parallel
-        const [
-          solarStartResponse, 
-          solarEndResponse, 
-          commonStartResponse, 
-          commonEndResponse, 
-          spduStartResponse, 
-          spduEndResponse
-        ] = await Promise.all([
-          solarStartQuery, 
-          solarEndQuery, 
-          commonStartQuery, 
-          commonEndQuery, 
-          spduStartQuery, 
-          spduEndQuery
-        ]);
-        
-        // Handle any errors
-        if (solarStartResponse.error) throw solarStartResponse.error;
-        if (solarEndResponse.error) throw solarEndResponse.error;
-        if (commonStartResponse.error) throw commonStartResponse.error;
-        if (commonEndResponse.error) throw commonEndResponse.error;
-        if (spduStartResponse.error) throw spduStartResponse.error;
-        if (spduEndResponse.error) throw spduEndResponse.error;
-        
-        // Calculate solar generation
-        let solarGeneration = 0;
-        if (solarStartResponse.data && solarEndResponse.data) {
-          // Group readings by meter ID
-          const startReadingByMeterId = groupBy(solarStartResponse.data, 'building_meter_id');
-          const endReadingByMeterId = groupBy(solarEndResponse.data, 'building_meter_id');
-          
-          // Calculate the difference for each meter
-          solarMeterIds.forEach(meterId => {
-            const start = startReadingByMeterId[meterId]?.[0];
-            const end = endReadingByMeterId[meterId]?.[0];
-            
-            if (start && end) {
-              solarGeneration += (Number(end.reading) - Number(start.reading));
-            } else if (end && !start) {
-              // If we only have end readings, just use those (lifetime case)
-              solarGeneration += Number(end.reading);
-            }
-          });
-        }
-        
-        // Calculate common utilities usage
-        let commonUtilitiesUsage = 0;
-        if (commonStartResponse.data && commonEndResponse.data) {
-          // Group readings by meter ID
-          const startReadingByMeterId = groupBy(commonStartResponse.data, 'building_meter_id');
-          const endReadingByMeterId = groupBy(commonEndResponse.data, 'building_meter_id');
-          
-          // Calculate the difference for each meter
-          commonMeterIds.forEach(meterId => {
-            const start = startReadingByMeterId[meterId]?.[0];
-            const end = endReadingByMeterId[meterId]?.[0];
-            
-            if (start && end) {
-              commonUtilitiesUsage += (Number(end.reading) - Number(start.reading));
-            } else if (end && !start) {
-              // If we only have end readings, just use those (lifetime case)
-              commonUtilitiesUsage += Number(end.reading);
-            }
-          });
-        }
-        
-        // Calculate SPDU usage (solar and grid)
-        let solarDistributed = 0;
-        let gridConsumed = 0;
-        
-        if (spduStartResponse.data && spduEndResponse.data) {
-          // Group readings by SPDU ID
-          const startReadingBySpduId = groupBy(spduStartResponse.data, 'spdu_id');
-          const endReadingBySpduId = groupBy(spduEndResponse.data, 'spdu_id');
-          
-          // Get unique SPDU IDs
-          const spduIds = [...new Set([
-            ...Object.keys(startReadingBySpduId),
-            ...Object.keys(endReadingBySpduId)
-          ])];
-          
-          // Calculate difference for each SPDU
-          spduIds.forEach(spduId => {
-            const start = startReadingBySpduId[spduId]?.[0];
-            const end = endReadingBySpduId[spduId]?.[0];
-            
-            if (start && end) {
-              solarDistributed += (Number(end.source2_kwh) - Number(start.source2_kwh));
-              gridConsumed += (Number(end.source1_kwh) - Number(start.source1_kwh));
-            } else if (end && !start) {
-              // If we only have end readings, just use those (lifetime case)
-              solarDistributed += Number(end.source2_kwh);
-              gridConsumed += Number(end.source1_kwh);
-            }
-          });
-        }
-        
-        // Convert to MWh
-        solarGeneration = solarGeneration / 1000;
-        commonUtilitiesUsage = commonUtilitiesUsage / 1000;
-        solarDistributed = solarDistributed / 1000;
-        gridConsumed = gridConsumed / 1000;
-        
-        // Calculate solar consumed (distributed + common utilities)
-        const solarConsumed = solarDistributed + commonUtilitiesUsage;
-        
-        // Calculate unused solar (generated - consumed)
-        // If consumed is somehow larger than generated, set unused to 0
-        const solarUnused = Math.max(0, solarGeneration - solarConsumed);
-        
-        // Set the usage data
-        setUsageData({
-          solarGenerated: parseFloat(solarGeneration.toFixed(2)),
-          solarConsumed: parseFloat(solarConsumed.toFixed(2)),
-          solarDistributed: parseFloat(solarDistributed.toFixed(2)),
-          solarCommonUtilities: parseFloat(commonUtilitiesUsage.toFixed(2)),
-          solarUnused: parseFloat(solarUnused.toFixed(2)),
-          gridConsumed: parseFloat(gridConsumed.toFixed(2))
+        // Call Supabase to get energy data using the stored function
+        const { data, error } = await supabase.rpc('get_energy_data', {
+          p_date_range: dateRange,
+          p_start_date: formattedStartDate,
+          p_end_date: formattedEndDate
         });
+        
+        if (error) throw error;
+        
+        if (data) {
+          console.log('Energy data from RPC:', data);
+          
+          // Set the usage data from the response
+          setUsageData({
+            solarGenerated: Number(data.generated) || 0,
+            solarConsumed: Number(data.consumed) || 0,
+            solarDistributed: Number(data.distributed) || 0,
+            solarCommonUtilities: Number(data.commonUtilities) || 0,
+            solarUnused: Number(data.unused) || 0,
+            gridConsumed: Number(data.gridConsumed) || 0
+          });
+        }
       } catch (error) {
         console.error('Error fetching usage details:', error);
         toast({
@@ -254,7 +102,7 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
     let formattedEndDate: string;
 
     // Default date during development
-    const developmentDate = new Date(2023, 2, 31); // March 31, 2023
+    const developmentDate = new Date(2024, 2, 31); // March 31, 2024
 
     switch (dateRange) {
       case 'day':
@@ -269,7 +117,7 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
         break;
         
       case 'month':
-        const monthDate = selectedMonth || new Date(2023, 2, 1); // March 2023
+        const monthDate = selectedMonth || new Date(2024, 2, 1); // March 2024
         const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
         const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0, 23, 59, 59, 999);
         
@@ -283,7 +131,7 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
           customStart.setHours(0, 0, 0, 0);
           formattedStartDate = customStart.toISOString();
         } else {
-          formattedStartDate = new Date(2023, 0, 1).toISOString(); // Default to Jan 1, 2023
+          formattedStartDate = new Date(2024, 0, 1).toISOString(); // Default to Jan 1, 2024
         }
         
         if (endDate) {
@@ -291,7 +139,7 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
           customEnd.setHours(23, 59, 59, 999);
           formattedEndDate = customEnd.toISOString();
         } else {
-          formattedEndDate = new Date(2023, 11, 31, 23, 59, 59, 999).toISOString(); // Default to Dec 31, 2023
+          formattedEndDate = new Date(2024, 11, 31, 23, 59, 59, 999).toISOString(); // Default to Dec 31, 2024
         }
         break;
         
@@ -304,16 +152,6 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
     }
     
     return { formattedStartDate, formattedEndDate };
-  };
-
-  // Helper function to group array by key
-  const groupBy = <T extends Record<string, any>>(array: T[], key: keyof T): Record<string, T[]> => {
-    return array.reduce((result, item) => {
-      const groupKey = String(item[key]);
-      result[groupKey] = result[groupKey] || [];
-      result[groupKey].push(item);
-      return result;
-    }, {} as Record<string, T[]>);
   };
 
   return (

@@ -164,9 +164,10 @@ export const useStatsData = (
         
         console.log('Energy data from RPC:', energyData);
         
-        // Type assertions and safe fallbacks
-        const typedProjectStats = projectStatsData as ProjectStats;
-        const typedEnergyData = energyData as EnergyData;
+        // Type assertions with proper casting - first cast to unknown, then to the specific type
+        // This addresses the TypeScript error by making the type conversion explicit
+        const typedProjectStats = projectStatsData as unknown as ProjectStats;
+        const typedEnergyData = energyData as unknown as EnergyData;
         
         // Organize the data with type safety
         const projects = typedProjectStats?.projects || { total: 0, active: 0, inactive: 0 };

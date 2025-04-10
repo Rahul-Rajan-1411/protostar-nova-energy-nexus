@@ -62,7 +62,8 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
           console.log('Energy data from RPC:', data);
           
           // Cast data to the expected type for safe property access
-          const typedData = data as EnergyData;
+          // Using double casting to ensure type safety
+          const typedData = data as unknown as EnergyData;
           
           // Update chart data
           const solarValue = Number(typedData.distributed || 0);

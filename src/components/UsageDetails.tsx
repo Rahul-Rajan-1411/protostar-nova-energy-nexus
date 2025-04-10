@@ -91,8 +91,8 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
         if (data) {
           console.log('Energy data from RPC:', data);
           
-          // Cast the data to the expected type
-          const typedData = data as EnergyData;
+          // Cast the data to the expected type with double casting for type safety
+          const typedData = data as unknown as EnergyData;
           
           // Set the usage data from the response with safe property access
           setUsageData({

@@ -164,10 +164,14 @@ export const useStatsData = (
         
         console.log('Energy data from RPC:', energyData);
         
-        // Organize the data
-        const projects = projectStatsData?.projects || { total: 0, active: 0, inactive: 0 };
-        const spdus = projectStatsData?.spdus || { total: 0, active: 0, inactive: 0 };
-        const centralDevices = projectStatsData?.centralDevices || { total: 0, active: 0, inactive: 0 };
+        // Type assertions and safe fallbacks
+        const typedProjectStats = projectStatsData as ProjectStats;
+        const typedEnergyData = energyData as EnergyData;
+        
+        // Organize the data with type safety
+        const projects = typedProjectStats?.projects || { total: 0, active: 0, inactive: 0 };
+        const spdus = typedProjectStats?.spdus || { total: 0, active: 0, inactive: 0 };
+        const centralDevices = typedProjectStats?.centralDevices || { total: 0, active: 0, inactive: 0 };
         
         // If the date is in the future, return zeros for energy data
         const now = new Date();
@@ -177,13 +181,13 @@ export const useStatsData = (
         const solar = isDateInFuture ? 
           { total: 0, consumed: 0, unused: 0, grid: 0 } : 
           {
-            total: Number(energyData?.generated || 0),
-            consumed: Number(energyData?.consumed || 0),
-            unused: Number(energyData?.unused || 0),
-            grid: Number(energyData?.gridConsumed || 0)
+            total: Number(typedEnergyData?.generated || 0),
+            consumed: Number(typedEnergyData?.consumed || 0),
+            unused: Number(typedEnergyData?.unused || 0),
+            grid: Number(typedEnergyData?.gridConsumed || 0)
           };
 
-        const result = {
+        const result: StatsData = {
           projects,
           spdus,
           centralDevices,

@@ -91,14 +91,17 @@ const UsageDetails = ({ dateRange, startDate, endDate, selectedMonth }: UsageDet
         if (data) {
           console.log('Energy data from RPC:', data);
           
-          // Set the usage data from the response
+          // Cast the data to the expected type
+          const typedData = data as EnergyData;
+          
+          // Set the usage data from the response with safe property access
           setUsageData({
-            solarGenerated: Number(data.generated || 0),
-            solarConsumed: Number(data.consumed || 0),
-            solarDistributed: Number(data.distributed || 0),
-            solarCommonUtilities: Number(data.commonUtilities || 0),
-            solarUnused: Number(data.unused || 0),
-            gridConsumed: Number(data.gridConsumed || 0)
+            solarGenerated: Number(typedData.generated || 0),
+            solarConsumed: Number(typedData.consumed || 0),
+            solarDistributed: Number(typedData.distributed || 0),
+            solarCommonUtilities: Number(typedData.commonUtilities || 0),
+            solarUnused: Number(typedData.unused || 0),
+            gridConsumed: Number(typedData.gridConsumed || 0)
           });
         }
       } catch (error) {

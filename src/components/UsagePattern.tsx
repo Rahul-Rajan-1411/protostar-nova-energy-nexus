@@ -61,9 +61,12 @@ const UsagePattern = ({ dateRange, startDate, endDate, selectedMonth }: UsagePat
         if (data) {
           console.log('Energy data from RPC:', data);
           
+          // Cast data to the expected type for safe property access
+          const typedData = data as EnergyData;
+          
           // Update chart data
-          const solarValue = Number(data.distributed || 0);
-          const gridValue = Number(data.gridConsumed || 0);
+          const solarValue = Number(typedData.distributed || 0);
+          const gridValue = Number(typedData.gridConsumed || 0);
           
           setChartData([
             { name: 'Solar', value: solarValue, color: '#27ae60' },
